@@ -1,5 +1,8 @@
 """Shared pytest configuration and fixtures.
 
+Pre-warms numpy.random at collection time so Hypothesis's lazy import never lands
+inside a timed test.
+
 Fixtures:
     questions: a three-question set covering every question type.
 Hooks:
