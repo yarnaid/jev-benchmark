@@ -22,7 +22,7 @@ uv run jev-bench generate --count 200     # new generation (needs OPENROUTER_API
 uv run jev-bench run anthropic -g <generation-id> [--mode all_in_one] [--model anthropic/claude-sonnet-5]
 
 uv run pytest                             # default suite (no network; integration + slow excluded)
-uv run pytest tests/test_compare.py -k fleiss -v    # one module / one test
+uv run pytest tests/test_compare_report.py -k fleiss -v    # one module / one test
 uv run pytest --cov --cov-fail-under=95   # coverage gate
 uv run pytest -m integration tests/test_integration_openrouter.py   # real, PAID OpenRouter calls
 uv run ruff check --fix && uv run ruff format && uv run pyright     # after every change
@@ -51,9 +51,11 @@ node --test tests/js/                           # JS unit tests (Node's runner, 
   (`prompt.py`), then the job (`generator.py`). The generator's own answers become `reference_answers`.
 - **Persistence**: JSON/JSONL under `data/` (`store/`). `data/embeddings/` is a gitignored per-model vector
   cache keyed by sha256 of the exact input text.
-  - Runs and generations left `running` become `interrupted` at startup (`Services.sweep_interrupted`).
-- **Comparison** (`compare.py`, pure numpy via `metrics/`):
-  - raters are runs, the generator reference and optional human labels;
+  - Runs and generations left `running` become `interrupted` when the web server starts
+    (`Services.sweep_interrupted`; the CLI does not sweep).
+- **Comparison** (`compare/`: `raters.py`, `pairs.py`, `report.py`, `rows.py`; pure numpy via `metrics/`):
+  - raters are runs, the generator reference and optional human labels; a rater whose question-set
+    snapshot is incompatible with the base is skipped with a warning;
   - pairwise agreement / κ (quadratic for score) / JSD / Pearson / Brier with bootstrap CIs, plus Fleiss'
     κ over runs;
   - a per-email disagreement index.
@@ -85,7 +87,7 @@ node --test tests/js/                           # JS unit tests (Node's runner, 
 ## Key safety
 
 - The server key (`OPENROUTER_API_KEY`) always wins; the browser-supplied `X-OpenRouter-Key` header is
-  used only when the server has none, and only on `POST /runs` and `POST /generations`.
+  used only when the server has none, and only on `POST /api/runs` and `POST /api/generations`.
 - Keys are never persisted (run/generation/response files) and never logged.
 - `classifiers/*` and `GeneratorDeps` hold the key as `SecretStr`, never a plain `str` field.
 - Every entry point (`cli.py`, `web/app.py`) calls `log_setup.configure_logging()` first, which runs with
