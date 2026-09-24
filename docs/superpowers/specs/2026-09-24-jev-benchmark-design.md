@@ -250,8 +250,8 @@ data/
     little-endian), `cost` and `input_tokens` (the text's share of its original request), `created_at`;
   - the key covers the rendered text, so editing a template or a description invalidates exactly the
     affected entries;
-  - loaded into memory at run start; appends are guarded by a per-model `asyncio.Lock`; a duplicate key
-    (two concurrent runs) is harmless, and the last line wins;
+  - loaded into memory at run start; one shared instance per model, with synchronous appends (§14); a
+    duplicate key (two concurrent runs) is harmless, and the last line wins;
   - it is derived, large (~16 KB per 3072-dim vector) and regenerable, so it is **gitignored**.
 - **Status lifecycle** (runs and generations): `running` → `completed` | `cancelled` | `failed`. On server
   start, any `running` without a live task becomes `interrupted`, and its totals are recomputed from the
@@ -292,7 +292,7 @@ prompt. Parsing rules:
 | `settings.py` | env settings (pydantic-settings) |
 | `questions.py` | question-set models (discriminated union), TOML loader, question rendering for prompts |
 | `emails.py` | `Email` model and `to_state()` |
-| `web/api_key.py` | FastAPI dependency resolving the job's API key (server key → header → 400) |
+| `web/deps.py` | FastAPI dependencies: shared services, and the job's API key (server key → header → 400) |
 | `openrouter.py` | shared `httpx.AsyncClient` wrapper: per-call API key (never on the shared client), timeouts, JSON and SSE-stream POST, retry with jittered backoff on 429/5xx/524/529/transport errors, typed `OpenRouterError(status, fatal)`; 401/402/403 are fatal |
 | `catalog.py` | fetch and filter the OpenRouter catalog per column (chat: `structured_outputs` required, `:batch` excluded), in-memory TTL cache (1 h), `ModelInfo` with pricing, limits and a cost estimate |
 | `classifiers/base.py` | `Classifier` protocol: `emails_per_request`, `prepare()` (one-off setup), `classify(emails) -> RequestResult` (per-email answers or errors, plus the request's usage, latency and raw body) |
@@ -378,11 +378,15 @@ user payload.
 
 **Budget per kind:**
 
-| kind | input must be ≤ | output must be ≤ |
+| kind | input + estimated output must be ≤ | estimated output must be ≤ |
 |---|---|---|
-| chat | `context_length − max_completion_tokens` (`max_tokens` is sent as `max_completion_tokens`) | `max_completion_tokens`, estimated as `n_emails × est_output_tokens_per_email` |
-| Jev | `context_length − jev_output_reserve` (32 000 total, questions included) | n/a |
-| embeddings | each text ≤ `context_length`; request total ≤ `max_request_tokens` | n/a |
+| chat | `context_length` (estimated output = `n_emails × est_output_tokens_per_email`) | `max_completion_tokens` |
+| Jev | `context_length` (32 000 total, questions included; estimated output = `jev_output_reserve`) | n/a |
+| embeddings | request total ≤ `max_request_tokens`; each text ≤ `context_length` | n/a |
+
+Chat requests send `max_tokens = min(max_completion_tokens, context_length − input)`. An earlier draft
+reserved the full `max_completion_tokens` from the context; that leaves no input budget for models whose
+output limit equals their context.
 
 **Split rule** (`request_plan.py`, pure and table-tested):
 
@@ -560,6 +564,33 @@ The Benchmark page has three parts:
 
 ## 13. Stack
 
-Python ≥ 3.14 with uv. FastAPI + uvicorn, httpx (direct, no OpenAI SDK: the Decisions API isn't in it,
-it's cheaper to import, and it can be mocked with `MockTransport`), pydantic v2 + pydantic-settings, typer,
-loguru + rich, numpy. Dev: pytest, pytest-cov, hypothesis, ruff, pyright.
+Python ≥ 3.14 with uv. FastAPI + uvicorn, httpx2 (Pydantic's maintained continuation of httpx, with the
+same API; Starlette 1.7's TestClient deprecates plain httpx). We call it directly instead of using the
+OpenAI SDK: the Decisions API isn't in the SDK, httpx2 imports in ~46 ms and can be mocked with
+`MockTransport`. Also pydantic v2 + pydantic-settings, typer, loguru + rich, numpy. Dev: pytest,
+pytest-asyncio, pytest-cov, pytest-timeout, hypothesis, factory-boy, ruff, pyright.
+
+## 14. Revisions made while planning (2026-09-24)
+
+- **httpx → httpx2** (§13).
+- **Chat token budget** is input + estimated output ≤ context (§7).
+- **Modules added so CLI and web share one code path:**
+  - `benchmark_config.py` (loader for `benchmark.toml`);
+  - `ids.py` (slugs and timestamped ids);
+  - `services.py` (the service container used by the web app and the CLI);
+  - `run_launcher.py` and `generation/launcher.py` (validate a request, build meta and classifier, start
+    the job);
+  - `store/status.py`;
+  - `cli_jobs.py` (async bodies of the CLI commands, keeping `cli.py` import-light).
+
+  `web/api_key.py` becomes `web/deps.py` (services + API-key dependencies). `chat_content()` and
+  `json_schema_format()` live in `openrouter.py` because both the classifier and the generator need them.
+- **Embedding cache:** the registry hands out one cache instance per model, and appends are synchronous
+  with no `await` inside. Coroutines therefore cannot interleave writes, and no lock is needed.
+- **CSP:** `style-src` also allows `'unsafe-inline'` (Bootstrap and Chart.js set inline styles), and
+  `img-src` allows `data:` (Bootstrap's SVG form icons). SRI covers the jsDelivr assets; Google Fonts CSS
+  varies per user agent and cannot carry SRI. CSS cannot read `localStorage`.
+- **Config files** (`questions.toml`, `benchmark.toml`, `generation.toml`) are re-read whenever a run or
+  generation starts, so edits apply without a server restart.
+- **`GET /emails`** returns `{questions, rows}` so the Explorer can render filters and the labelling form.
+  `GET /emails/{id}` also carries the current question set.
