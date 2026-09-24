@@ -71,3 +71,26 @@ def test_sent_at_is_inside_the_window_and_minute_aligned(questions: QuestionSet)
 
 def test_empty_plan(questions: QuestionSet) -> None:
     assert build_plan(_config(), questions, count=0, seed=1, models=("m",), now=_NOW) == []
+
+
+def test_stratified_trait_covers_different_subsets_across_seeds(
+    questions: QuestionSet,
+) -> None:
+    config = _config()
+    all_subsets = set()
+    for seed in range(10):
+        plan = build_plan(config, questions, count=2, seed=seed, models=("m",), now=_NOW)
+        traits = [item.traits["category"] for item in plan]
+        subset = frozenset(traits)
+        all_subsets.add(subset)
+    assert len(all_subsets) >= 2
+
+
+def test_stratified_trait_counts_balanced_when_uneven(questions: QuestionSet) -> None:
+    config = _config()
+    for seed in range(10):
+        plan = build_plan(config, questions, count=7, seed=seed, models=("m",), now=_NOW)
+        traits = [item.traits["category"] for item in plan]
+        counts = Counter(traits)
+        vals = sorted(counts.values())
+        assert max(vals) - min(vals) <= 1

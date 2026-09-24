@@ -82,7 +82,8 @@ def build_plan(
 def _trait_column(trait: ResolvedTrait, count: int, rng: random.Random) -> list[str]:
     keys = list(trait.values)
     if trait.stratify:
-        column = [keys[index % len(keys)] for index in range(count)]
+        order = rng.sample(keys, len(keys))
+        column = [order[index % len(order)] for index in range(count)]
         rng.shuffle(column)
         return column
     return rng.choices(keys, weights=[trait.values[key].weight for key in keys], k=count)
