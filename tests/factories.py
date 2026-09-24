@@ -7,32 +7,33 @@ Classes:
 
 from datetime import UTC, datetime
 
-import factory
+from factory.base import Factory
+from factory.declarations import LazyFunction, Sequence, SubFactory
 
 from jev_bench.emails import Email, Party
 
 
-class PartyFactory(factory.Factory):
+class PartyFactory(Factory[Party]):
     class Meta:
         model = Party
 
-    name = factory.Sequence(lambda n: f"Person {n}")
-    address = factory.Sequence(lambda n: f"person{n}@mail.test")
+    name = Sequence(lambda n: f"Person {n}")
+    address = Sequence(lambda n: f"person{n}@mail.test")
 
 
-class EmailFactory(factory.Factory):
+class EmailFactory(Factory[Email]):
     class Meta:
         model = Email
 
-    id = factory.Sequence(lambda n: f"20260924-100000-gen-abcd.{n + 1:04d}")
+    id = Sequence(lambda n: f"20260924-100000-gen-abcd.{n + 1:04d}")
     sent_at = datetime(2026, 9, 20, 9, 30, tzinfo=UTC)
-    sender = factory.SubFactory(PartyFactory)
-    to = factory.LazyFunction(lambda: (PartyFactory(),))
+    sender = SubFactory(PartyFactory)
+    to = LazyFunction(lambda: (PartyFactory(),))
     cc = ()
-    subject = factory.Sequence(lambda n: f"Subject {n}")
+    subject = Sequence(lambda n: f"Subject {n}")
     body = "Hello, please confirm the meeting."
     generator_model = "google/gemini-3.8-flash"
-    traits = factory.LazyFunction(dict)
-    reference_answers = factory.LazyFunction(
+    traits = LazyFunction(dict)
+    reference_answers = LazyFunction(
         lambda: {"category": "spam", "urgency": "today", "needs_reply": "yes"}
     )
