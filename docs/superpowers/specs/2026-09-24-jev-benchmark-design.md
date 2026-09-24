@@ -21,6 +21,9 @@ present, with optional human labels.
    - Each column's model is picked from a list filled live from the OpenRouter catalog.
    - The chat columns offer two modes: **per email** (one prompt per email) and **all in one** (every
      selected email in a single prompt).
+   - Before any request is sent, its token size is checked against the model's limits. A multi-email
+     request that doesn't fit is split into the minimal number of equal parts that do fit.
+   - Embeddings are computed once per (embedding model, text) and reused across runs.
    - The page shows live progress, wall-clock duration and total USD cost.
 3. Every run is persisted and can be reopened and compared with any other run later.
 4. Comparison shows per-column answer distributions (e.g. "how many emails each model called `spam`"),
@@ -49,7 +52,7 @@ is flagged `cost_estimated`.
 ```json
 {
   "model": "typesafe/jev-1.13",
-  "state": {"from": "...", "to": ["..."], "cc": [], "subject": "...", "body": "..."},
+  "state": {"sent_at": "2026-09-12T09:41:00+04:00", "from": "...", "to": ["..."], "cc": [], "subject": "...", "body": "..."},
   "questions": {
     "needs_reply": {"type": "noul", "instructions": "...", "criteria": {"true": "...", "false": "..."}},
     "category":    {"type": "choice", "instructions": "...", "criteria": {"spam": "...", "personal": "..."}},
@@ -88,7 +91,17 @@ generations and to report progress. The final chunk carries `usage`. The default
 `GET https://openrouter.ai/api/v1/models` (text models) and `?output_modalities=decisions` or
 `?output_modalities=embeddings` are public and need no key. Per model they return `id`, `name`,
 `pricing.prompt` and `pricing.completion` (USD per token), `context_length`,
-`top_provider.max_completion_tokens` and `supported_parameters`.
+`top_provider.max_completion_tokens` and `supported_parameters`. The limits used by the token budget
+(§7) come from here. Observed values:
+
+| model | context | max output |
+|---|---|---|
+| `typesafe/jev-1.13` | 32 000 (total) | n/a |
+| `anthropic/claude-sonnet-5` | 1 000 000 | 128 000 |
+| `openai/gpt-5.6-terra` | 1 050 000 | 128 000 |
+| `openai/text-embedding-3-large` | 8 192 per input text | n/a |
+
+There is no public token-count endpoint, so request sizes are **estimated** (§7, token budget).
 
 ## 3. Configuration: structured TOML in `config/`
 
@@ -148,13 +161,15 @@ Types mirror Jev primitives. Option ids are snake_case.
     OpenAI caches automatically;
   - `concurrency = 8` (per-email mode);
   - `all_in_one_timeout_s = 1800`;
-  - `est_output_tokens_per_email = 400`: used for the UI warning when an all-in-one run would exceed the
-    model's `max_completion_tokens`.
+  - `est_output_tokens_per_email = 400`: the output-side estimate for the token budget.
 - `[embeddings]`:
-  - `email_template` (default `"From: $from\nTo: $to\nCc: $cc\nSubject: $subject\n\n$body"`);
+  - `email_template` (default
+    `"Sent: $sent_at\nFrom: $from\nTo: $to\nCc: $cc\nSubject: $subject\n\n$body"`);
   - `option_template` (default `"$instructions $description"`);
   - `temperature = 0.05` (softmax τ);
-  - `emails_per_request = 32`, `concurrency = 4`.
+  - `emails_per_request = 32`, `max_request_tokens = 100000`, `concurrency = 4`.
+- `[tokens]`: `bytes_per_token = 3.0` (conservative estimator, §7), `jev_output_reserve = 1000`, and
+  fallback `context_length` and `max_completion_tokens` for models the catalog doesn't describe.
 - `[[columns]]`: `id`, `title`, `kind` (`decisions` | `chat` | `embeddings`), a catalog filter
   (`modality = "decisions"`, `modality = "embeddings"` or `prefix = "anthropic/"`) and
   `default_model`. The defaults are:
@@ -180,6 +195,7 @@ data/
   runs/<run_id>/predictions.jsonl        # one Prediction per email
   runs/<run_id>/responses.jsonl          # one line per HTTP request: email_ids, status, latency, body
   labels/<gen_id>.json                   # {email_id: {question_id: option_id}}, human labels
+  embeddings/<model-slug>/vectors.jsonl  # embedding cache (gitignored), see below
 ```
 
 - **Ids:** `gen_id` is `YYYYMMDD-HHMMSS-<name-slug>-<4hex>` and `run_id` is
@@ -188,8 +204,8 @@ data/
 - **Email:** `id` (`<gen_id>.<index:04d>`), `sent_at` (ISO 8601, sampled by the plan), `sender {name,
   address}`, `to [{name, address}]`, `cc [...]`, `subject`, `body`, `generator_model`, `traits {name:
   value}`, `reference_answers {question_id: option_id}`.
-- **What a benchmarked model sees:** only `{from, to, cc, subject, body}`, built by a single function
-  `Email.to_state()`. `sent_at`, `traits`, `reference_answers`, `generator_model` and the email `id` are
+- **What a benchmarked model sees:** only `{sent_at, from, to, cc, subject, body}`, built by a single
+  function `Email.to_state()`. `traits`, `reference_answers`, `generator_model` and the email `id` are
   never sent. Ids contain generation name slugs that could leak hints, so the all-in-one mode addresses
   emails by positional refs (`e001…`).
 - **GenerationMeta:** `id`, `name`, `created_at`, `status`, `requested`, `done`, `errors`, `seed`, snapshots
@@ -201,22 +217,36 @@ data/
   - request shape: `mode` (`per_email` | `all_in_one` for chat, `per_email` for Jev, `batched` for
     embeddings), `emails_per_request`, snapshots of the question set and column params, `concurrency`;
   - lifecycle: `status`, `created_at`, `finished_at`, `duration_s` (wall clock);
-  - totals: `n_emails`, `n_done`, `n_errors`, `n_requests`, `total_cost` (including `setup_cost`),
-    `setup_cost` (embedding the option texts), `input_tokens`, `output_tokens`, `latency_p50_ms` and
-    `latency_p95_ms` (over requests).
+  - totals: `n_emails`, `n_done`, `n_errors`, `n_requests`, `n_splits` (extra requests created by the
+    token budget), `total_cost` (actually paid in this run, including `setup_cost`), `setup_cost`
+    (embedding the option texts), `input_tokens`, `output_tokens`, `latency_p50_ms` and `latency_p95_ms`
+    (over requests);
+  - embeddings only: `cache_hits`, `cache_misses`, and `cold_cost` (what the run would have cost with an
+    empty cache: paid cost plus the cost originally recorded for every cached vector).
 - **Prediction:** `email_id`, `answers {question_id: {option_id: p}} | null`, `error | null`, `notes`,
   `request_index`, `batch_size`, `latency_ms` (of its request), `cost`, `input_tokens` and
   `output_tokens`, `resolved_model`, `similarities {question_id: {option_id: cosine}} | null` (embeddings
-  only). When `batch_size > 1`, cost and tokens are the request's totals split evenly across its emails.
+  only), `cached` (embeddings only: the email vector came from the cache, so this run paid 0 for it).
+  When `batch_size > 1`, cost and tokens are the request's totals split evenly across its emails.
 - **responses.jsonl** stores each raw response once per request instead of once per email. Embedding vectors
-  are stripped before storing; vectors are never persisted.
+  are stripped from it; they live only in the cache.
+- **Embedding cache** (`data/embeddings/<model-slug>/vectors.jsonl`, append-only):
+  - one line per text: `key` (sha256 of the exact rendered input text), `kind` (`option` | `email`),
+    `ref` (`<qid>:<option>` or the email id), `resolved_model`, `dim`, `vector` (base64 float32
+    little-endian), `cost` and `input_tokens` (the text's share of its original request), `created_at`;
+  - the key covers the rendered text, so editing a template or a description invalidates exactly the
+    affected entries;
+  - loaded into memory at run start; appends are guarded by a per-model `asyncio.Lock`; a duplicate key
+    (two concurrent runs) is harmless, and the last line wins;
+  - it is derived, large (~16 KB per 3072-dim vector) and regenerable, so it is **gitignored**.
 - **Status lifecycle** (runs and generations): `running` → `completed` | `cancelled` | `failed`. On server
   start, any `running` without a live task becomes `interrupted`, and its totals are recomputed from the
   JSONL. The output is the local filesystem itself, so these markers are authoritative.
 - **Writes:** JSONL lines are appended as each result arrives, so a crash loses at most in-flight
   requests. `*.json` files are written atomically (temp file + `os.replace`). Labels are guarded by an
   `asyncio.Lock`.
-- `data/` is **tracked in git**: results, generations and labels are meant to be kept and shared.
+- `data/` is **tracked in git** (except `data/embeddings/`): results, generations and labels are meant to
+  be kept and shared.
 
 ## 5. Canonical answers
 
@@ -254,15 +284,18 @@ prompt. Parsing rules:
 | `classifiers/jev.py` | Decisions request builder and response → distributions |
 | `classifiers/llm_schema.py` | JSON schema builders (single email; `results[]` array for all-in-one) |
 | `classifiers/llm.py` | chat classifier for both modes: prompt rendering, request, parsing and normalization |
-| `classifiers/embeddings.py` | embed the option texts in `prepare()`, embed emails per request, cosine → softmax(τ) |
+| `classifiers/embeddings.py` | option vectors in `prepare()` and email vectors per request, both cache-first (only misses are sent); cosine → softmax(τ) |
+| `tokens.py` | tokenizer-free, conservative token estimate for a text; per-model budgets from catalog limits and config fallbacks |
+| `request_plan.py` | pure function: chunks of emails + per-email token sizes + budget → requests (minimal equal split, oversize singles flagged) |
 | `generation/config.py` | `generation.toml` models and loader |
 | `generation/plan.py` | deterministic trait plan from a seed (stratified or weighted), `sent_at` sampling |
 | `generation/prompt.py` | template rendering, generator JSON schema (`email` + `answers` with per-question enums) |
 | `generation/generator.py` | executes one generation: concurrency, append emails, finalize meta |
 | `store/jsonfiles.py` | atomic JSON write, JSONL append and read |
 | `store/generations.py`, `store/runs.py`, `store/labels.py` | persistence per entity |
+| `store/embeddings.py` | embedding cache per model: load, lookup by text hash, locked append |
 | `jobs.py` | registry of background asyncio tasks (runs and generations): live progress, cancel, graceful shutdown |
-| `runner.py` | executes one benchmark run: `prepare()`, chunk emails by `emails_per_request`, run requests under a semaphore, split costs across emails, append results, finalize totals |
+| `runner.py` | executes one benchmark run: `prepare()`, build the request plan, run requests under a semaphore, split costs across emails, append results, finalize totals |
 | `metrics/distributions.py` | argmax, entropy, Jensen–Shannon divergence, expected score, softmax |
 | `metrics/agreement.py` | percent agreement, Cohen's κ (nominal and quadratic-weighted), Fleiss' κ, Pearson r, Brier score |
 | `metrics/bootstrap.py` | vectorized percentile bootstrap CI (numpy, fixed seed) |
@@ -300,20 +333,55 @@ A failed item is counted in `errors` and logged, and the generation continues. F
 
 1. Load the emails as the union of the chosen generations.
 2. Write `run.json` (`running`).
-3. Call `prepare()`. For embeddings this embeds the option texts once, and the cost is recorded as
-   `setup_cost`.
+3. Call `prepare()`. For embeddings this resolves the option vectors from the cache and embeds only the
+   misses; the cost paid is recorded as `setup_cost`.
 4. Chunk the emails by `emails_per_request`:
    - Jev: 1 (one call per email with all questions, Jev's recommended usage);
    - chat per-email: 1;
    - chat all-in-one: every email;
-   - embeddings: `[embeddings].emails_per_request`.
-5. Run the requests under a semaphore (`concurrency`).
-6. Append a `Prediction` for each email of a finished request. A per-email failure fills `error` and the
+   - embeddings: `[embeddings].emails_per_request`, counting cache misses only. Cached emails need no
+     request.
+5. Apply the **token budget** (below) to every chunk, which produces the final request list.
+6. Run the requests under a semaphore (`concurrency`).
+7. Append a `Prediction` for each email of a finished request. A per-email failure fills `error` and the
    run continues; a fatal error ends the run as `failed`.
-7. Finalize the totals.
+8. Finalize the totals.
 
 Duration is wall clock (`perf_counter`) from the first request to the last result. Cancel →
 `cancelled`.
+
+### Token budget (checked before every request)
+
+**Estimate.** `tokens(text) = ceil(utf8_bytes(text) / bytes_per_token)`, with `bytes_per_token = 3.0`.
+There is no tokenizer; it is deliberately pessimistic:
+
+- English runs at ~4 characters per token, so the estimate overshoots by about a third;
+- non-Latin scripts are multi-byte, so they are overestimated rather than underestimated.
+
+A request's size is the estimate of everything sent: the rendered system prompt plus the serialized
+user payload.
+
+**Budget per kind:**
+
+| kind | input must be ≤ | output must be ≤ |
+|---|---|---|
+| chat | `context_length − max_completion_tokens` (`max_tokens` is sent as `max_completion_tokens`) | `max_completion_tokens`, estimated as `n_emails × est_output_tokens_per_email` |
+| Jev | `context_length − jev_output_reserve` (32 000 total, questions included) | n/a |
+| embeddings | each text ≤ `context_length`; request total ≤ `max_request_tokens` | n/a |
+
+**Split rule** (`request_plan.py`, pure and table-tested):
+
+1. If a chunk fits, send it as is.
+2. Otherwise start with `k = ceil(needed / budget)` using the tighter of the input and output ratios.
+   Example: a 100 000 budget and 110 000 needed gives `k = 2`, two requests of ~55 000.
+3. Cut the chunk into `k` **contiguous parts balanced by token size** (greedy against the running target
+   `remaining / parts_left`). Email order is preserved.
+4. If uneven email sizes still leave a part over budget, increase `k` by 1 and repeat. This terminates at
+   one email per part.
+5. A single email that doesn't fit on its own gets a per-email error ("exceeds model limits") and is
+   **never sent or truncated**: truncating would feed different input to different columns.
+
+Splits are counted in `n_splits` and shown on the column card.
 
 ### Live progress
 
@@ -361,12 +429,19 @@ raters. It directly measures how much packing emails into one prompt changes the
   metrics do not depend on it), and it is fixed in config. Tuning τ on reference answers is forbidden,
   because generator answers must never feed the benchmark. Some option texts may be close to every email
   ("hubness"); per-option centering is a possible later knob.
-- **All in one** lets emails influence each other and adds position effects. It is bounded by the model's
-  output limit (about 300 emails at ~400 tokens each for 128k), and one failure (truncation, timeout)
-  fails every email in the request. Per-email latency is meaningless in this mode; only the run duration
-  and the request latency are reported.
-- `sent_at` is generated and stored but never sent to the models (explicit requirement). Relative dates in
-  the body ("by tomorrow") remain interpretable.
+- **All in one** lets emails influence each other and adds position effects. When the token budget splits
+  it, "all in one" really means "the fewest equal prompts that fit". With the default models the binding
+  limit is output (128k ≈ 300 emails at ~400 tokens each), and `n_splits` makes this visible. One failure
+  (truncation, timeout) fails every email in that request. Per-email latency is meaningless in this mode;
+  only the run duration and the request latency are reported.
+- **Token estimates are heuristic.** Overestimating only causes an earlier split. An underestimate, e.g.
+  for text much denser than 3 bytes per token, would surface as a provider 400 or `finish_reason =
+  "length"` recorded as request errors. There is no automatic re-split after a failed request.
+- **The embedding cache makes repeat runs nearly free and instant.** Cost comparisons therefore show both
+  the paid `total_cost` and `cold_cost`, plus the cache-hit rate. Wall-clock duration is not
+  reconstructable for cached work, so it is reported as measured.
+- `sent_at` is sent to every column as part of the email (explicit requirement). Models have no separate
+  notion of "now", so urgency is judged relative to `sent_at` and the body.
 - Reference answers come from the generator LLM: they are a weak reference, not ground truth.
 - Prompt caching lowers LLM cost on repeated system prompts. It is on by default because it reflects real
   deployment, and it is recorded in the run's param snapshot.
@@ -390,10 +465,11 @@ The Benchmark page has three parts:
 - A generation multi-select.
 - Four column cards (Jev / Anthropic / OpenAI / Embeddings; 4-up on wide screens, 2×2 on medium). Each
   card has a model `<select>` from the catalog (showing price per 1M in/out), Run and Cancel, progress bar,
-  live elapsed time, cost, tokens, errors and p50/p95 request latency.
-  - The chat cards add a mode toggle (*per email* / *all in one*). It shows an inline warning when
-    `n_emails × est_output_tokens_per_email` exceeds the model's `max_completion_tokens`.
-  - The embeddings card shows τ and the batch size.
+  live elapsed time, cost, tokens, errors, number of requests (with `n_splits`) and p50/p95 request
+  latency.
+  - The chat cards add a mode toggle (*per email* / *all in one*).
+  - The embeddings card also shows τ, the batch size, the cache-hit rate and `cold_cost` next to the paid
+    cost.
 - The comparison of the latest completed run per column whose `generation_ids` set equals the selected set
   (overridable with `?runs=a,b,c`): a summary table, then per question an argmax-count bar chart (raters
   side by side), pairwise metric tables with CIs, Fleiss' κ and per-rater entropy.
@@ -420,6 +496,18 @@ comparison work without a key. `mode` is only accepted for chat columns.
   `httpx.ASGITransport`. No real network in the default suite.
 - All-in-one parsing is table-driven: complete, missing ref, duplicate ref, truncated (`finish_reason =
   "length"`) and invalid JSON.
+- The request planner is table-driven:
+  - fits as is;
+  - 110k needed against a 100k budget → 2 × ~55k;
+  - lumpy sizes forcing `k + 1`;
+  - output-bound versus input-bound splits;
+  - an oversize single email flagged and never sent;
+  - order preserved.
+- The embedding cache is covered for:
+  - hit, miss and partial hit (only misses are sent);
+  - key change on a template edit;
+  - `cold_cost` accounting;
+  - a float32 base64 round-trip.
 - Hypothesis properties for the metrics and normalization: JSD symmetric and in [0, 1] with JSD(p, p) = 0;
   κ(a, a) = 1; agreement in [0, 1]; normalized distributions and softmax sum to 1; argmax of softmax is
   invariant to τ.
