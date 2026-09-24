@@ -18,6 +18,7 @@ import typer
 app = typer.Typer(
     no_args_is_help=True,
     add_completion=False,
+    pretty_exceptions_show_locals=False,
     help="Jev benchmark: generate emails, run columns, serve the UI.",
 )
 

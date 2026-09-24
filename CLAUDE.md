@@ -93,6 +93,8 @@ node --test tests/js/                           # JS unit tests (Node's runner, 
 - Every entry point (`cli.py`, `web/app.py`) calls `log_setup.configure_logging()` first, which runs with
   `diagnose=False` so a traceback can't leak a key from a local variable.
 - A provider refusal (401/402/403) logs the message without a traceback.
+- `cli.py` pins Typer's `pretty_exceptions_show_locals=False`, so an uncaught exception's pretty
+  traceback can't print a local variable holding a key.
 
 ## Conventions
 

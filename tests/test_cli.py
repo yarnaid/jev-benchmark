@@ -18,6 +18,10 @@ def test_help_lists_commands() -> None:
         assert command in result.output
 
 
+def test_pretty_exceptions_never_show_locals() -> None:
+    assert app.pretty_exceptions_show_locals is False
+
+
 @pytest.mark.parametrize(
     ("host", "warned"),
     [
