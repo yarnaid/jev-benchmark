@@ -291,6 +291,8 @@ class FakeOpenRouter:
         path = request.url.path
         if path.endswith("/v1/models"):
             return self._models(request)
+        if (unauthorized := self._unauthorized(request)) is not None:
+            return unauthorized
         body = json.loads(request.content)
         if path.endswith("/alpha/decisions"):
             usage = {"input_tokens": 100, "output_tokens": 10, "cost": 0.00001}
@@ -304,6 +306,14 @@ class FakeOpenRouter:
             usage = {"prompt_tokens": 5 * len(data), "cost": 0.00001 * len(data)}
             return httpx2.Response(200, json={"model": body["model"], "data": data, "usage": usage})
         return self._chat(body)
+
+    def _unauthorized(self, request: httpx2.Request) -> httpx2.Response | None:
+        token = request.headers.get("authorization", "")
+        if token.startswith("Bearer ") and token.removeprefix("Bearer ").strip():
+            return None
+        return httpx2.Response(
+            401, json={"error": {"message": "missing or invalid API key", "code": 401}}
+        )
 
     def _models(self, request: httpx2.Request) -> httpx2.Response:
         if self.models_status != 200:

@@ -3,6 +3,7 @@
 from datetime import UTC, datetime
 from typing import Any
 
+import httpx2
 import pytest
 from pydantic import ValidationError
 from tests.factories import FakeOpenRouter, ServicesFactory, seed_generation
@@ -29,7 +30,8 @@ async def test_launch_run_for_every_column_kind(
     per_request: int | None,
     requests: int,
 ) -> None:
-    services = make_services(FakeOpenRouter())
+    fake = FakeOpenRouter()
+    services = make_services(fake)
     generation_id = seed_generation(services)
     request = RunRequest.model_validate(
         {"column": column, "generation_ids": [generation_id], "mode": mode}
@@ -44,6 +46,27 @@ async def test_launch_run_for_every_column_kind(
     assert final.status == "completed"
     assert (final.n_done, final.n_errors, final.n_requests) == (2, 0, requests)
     assert final.generation_ids == (generation_id,)
+    posts = [sent for sent in fake.requests if sent.method == "POST"]
+    assert posts
+    assert all(sent.headers["authorization"] == "Bearer sk-test" for sent in posts)
+
+
+@pytest.mark.parametrize(
+    "headers",
+    [
+        pytest.param({}, id="missing"),
+        pytest.param({"Authorization": "Bearer "}, id="empty-token"),
+        pytest.param({"Authorization": "Basic sk-test"}, id="wrong-scheme"),
+    ],
+)
+def test_fake_openrouter_rejects_unauthenticated_posts(headers: dict[str, str]) -> None:
+    fake = FakeOpenRouter()
+    request = httpx2.Request(
+        "POST", "https://openrouter.test/api/v1/chat/completions", headers=headers, json={}
+    )
+    response = fake(request)
+    assert response.status_code == 401
+    assert fake.requests == [request]
 
 
 async def test_catalog_outage_falls_back_to_default_limits(make_services: ServicesFactory) -> None:
@@ -85,6 +108,7 @@ def _request(**fields: Any) -> RunRequest:
             id="model-not-in-catalog",
         ),
         pytest.param({}, True, "   ", "an OpenRouter API key is required", id="blank-api-key"),
+        pytest.param({}, True, "", "an OpenRouter API key is required", id="empty-api-key"),
     ],
 )
 async def test_invalid_requests_raise_launch_errors(
