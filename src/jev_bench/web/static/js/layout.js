@@ -57,7 +57,10 @@ async function refreshKeyBadge() {
 function keyModal() {
   const input = h("input", { class: "form-control font-monospace", type: "password", autocomplete: "off", placeholder: "sk-or-v1-…", "aria-label": "OpenRouter API key" });
   const modal = h("div", { class: "modal fade", id: "key-modal", tabindex: "-1", "aria-labelledby": "key-modal-title", "aria-hidden": "true" });
-  const hide = () => bootstrap.Modal.getOrCreateInstance(modal).hide();
+  const hide = () => {
+    document.activeElement?.blur();
+    bootstrap.Modal.getOrCreateInstance(modal).hide();
+  };
   const save = () => {
     const value = input.value.trim();
     if (!value) return;
