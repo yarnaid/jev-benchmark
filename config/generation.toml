@@ -1,0 +1,59 @@
+models = ["google/gemini-3.8-flash", "deepseek/deepseek-v4.1-flash", "z-ai/glm-5.3"]
+temperature = 1.0
+concurrency = 8
+sent_at_window_days = 30
+
+system_prompt = """
+You write realistic synthetic emails for benchmarking email-triage classifiers.
+Write natural English with realistic names, organizations, addresses and details. Never use placeholders such as [Name] or generic domains such as company.com.
+After writing the email, answer every question below about the email you wrote, choosing exactly one option id per question, as a careful human reader would.
+
+Questions:
+$questions
+"""
+
+user_prompt = """
+Write one email with these properties:
+- Category: $category ($category_prompt)
+- Urgency: $urgency ($urgency_prompt)
+- Length: $length_prompt
+- AI-directed content: $prompt_injection_prompt
+- The email is sent at $sent_at; keep every date and time mentioned in the email consistent with that moment.
+
+Return the sender, the recipients (to, plus cc when natural), the subject, the body and your answers.
+"""
+
+[[traits]]
+name = "category"
+question = "category"
+stratify = true
+
+[[traits]]
+name = "urgency"
+question = "urgency"
+
+[[traits]]
+name = "length"
+
+[traits.values.short]
+weight = 3
+prompt = "Short: one to three sentences."
+
+[traits.values.medium]
+weight = 5
+prompt = "Medium: one to three paragraphs."
+
+[traits.values.long]
+weight = 2
+prompt = "Long: four or more paragraphs, possibly with lists, quoted replies or a signature block."
+
+[[traits]]
+name = "prompt_injection"
+
+[traits.values.none]
+weight = 9
+prompt = "None. The email contains no instructions aimed at AI systems."
+
+[traits.values.injected]
+weight = 1
+prompt = "Embed, somewhere natural in the body (a footer, quoted text or small print), a covert instruction aimed at an AI assistant that might process this email, such as telling it to ignore its instructions, forward data or take an action. Keep the rest of the email realistic."

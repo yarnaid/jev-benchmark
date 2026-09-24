@@ -1,8 +1,12 @@
 """Contract tests for the shipped TOML configuration files in config/."""
 
+from datetime import UTC, datetime
 from pathlib import Path
 
 from jev_bench.benchmark_config import load_benchmark_config
+from jev_bench.generation.config import load_generation_config
+from jev_bench.generation.plan import build_plan, resolve_traits
+from jev_bench.generation.prompt import render_prompts
 from jev_bench.questions import load_question_set
 
 CONFIG_DIR = Path(__file__).resolve().parents[1] / "config"
@@ -44,3 +48,23 @@ def test_shipped_benchmark_config() -> None:
     assert config.column("anthropic").cache_system_prompt is True
     assert config.column("openai").cache_system_prompt is False
     assert config.embeddings.email_template.startswith("Sent: $sent_at")
+
+
+def test_shipped_generation_config() -> None:
+    config = load_generation_config(CONFIG_DIR / "generation.toml")
+    questions = load_question_set(CONFIG_DIR / "questions.toml")
+    traits = resolve_traits(config, questions)
+    expected_models = (
+        "google/gemini-3.8-flash",
+        "deepseek/deepseek-v4.1-flash",
+        "z-ai/glm-5.3",
+    )
+    assert config.models == expected_models
+    expected_traits = ["category", "urgency", "length", "prompt_injection"]
+    assert [trait.name for trait in traits] == expected_traits
+    now = datetime(2026, 9, 24, tzinfo=UTC)
+    plan = build_plan(config, questions, count=40, seed=1, models=config.models, now=now)
+    assert {item.traits["category"] for item in plan} == set(questions.get("category").option_ids)
+    system, user = render_prompts(config, traits, plan[0], questions)
+    assert "$" not in system + user
+    assert plan[0].sent_at.isoformat() in user
