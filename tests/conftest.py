@@ -7,6 +7,7 @@ Fixtures:
     questions: a three-question set covering every question type.
     make_client: async OpenRouterClient factory.
     make_services: async Services factory on tmp dirs.
+    make_app: TestClient factory with the lifespan entered.
     log_records: worst-case loguru sink (diagnose=True, backtrace=True) for leak regression tests.
 Hooks:
     pytest_configure: pre-warm numpy.random module.
@@ -20,12 +21,14 @@ from typing import TYPE_CHECKING
 
 import httpx2
 import pytest
+from fastapi.testclient import TestClient
 from loguru import logger
-from tests.factories import ClientFactory, ServicesFactory, mini_settings
+from tests.factories import AppFactory, ClientFactory, ServicesFactory, mini_settings
 
 from jev_bench.openrouter import OpenRouterClient
 from jev_bench.questions import ChoiceQuestion, NoulQuestion, QuestionSet, ScoreQuestion
 from jev_bench.services import Services
+from jev_bench.web.app import create_app
 
 if TYPE_CHECKING:
     from loguru import Message
@@ -122,3 +125,22 @@ async def make_services(
     yield build
     for http in opened:
         await http.aclose()
+
+
+@pytest.fixture
+def make_app(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[AppFactory]:
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    clients: list[TestClient] = []
+
+    def build(handler: Handler, *, api_key: str | None = None) -> TestClient:
+        http = httpx2.AsyncClient(
+            base_url="https://openrouter.test/api", transport=httpx2.MockTransport(handler)
+        )
+        client = TestClient(create_app(mini_settings(tmp_path, api_key), http=http))
+        client.__enter__()
+        clients.append(client)
+        return client
+
+    yield build
+    for client in clients:
+        client.__exit__(None, None, None)

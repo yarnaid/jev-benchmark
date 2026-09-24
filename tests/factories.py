@@ -12,23 +12,27 @@ Functions:
     mini_settings: isolated Settings over a mini config, reading no env or `.env`.
     generator_output: JSON text of one generator response.
     seed_generation: save a completed GenerationMeta plus its emails to services.generations.
+    services_of: typed access to a TestClient's app.state.services.
 Constants:
     MINI_QUESTIONS_TOML, MINI_BENCHMARK_TOML, MINI_GENERATION_TOML: mini config file contents.
 Types:
     ClientFactory: type of the make_client fixture.
     ServicesFactory: type of the make_services fixture.
+    AppFactory: type of the make_app fixture.
 """
 
 import json
 from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import httpx2
 from factory.base import Factory
 from factory.declarations import LazyFunction, SubFactory
 from factory.declarations import Sequence as FactorySequence
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
 from jev_bench.emails import Email, Party
 from jev_bench.openrouter import OpenRouterClient
@@ -100,6 +104,12 @@ def sse_body(
 
 type ClientFactory = Callable[..., OpenRouterClient]
 type ServicesFactory = Callable[..., Services]
+type AppFactory = Callable[..., TestClient]
+
+
+def services_of(client: TestClient) -> Services:
+    return cast(FastAPI, client.app).state.services
+
 
 MINI_QUESTIONS_TOML = """
 name = "mini"

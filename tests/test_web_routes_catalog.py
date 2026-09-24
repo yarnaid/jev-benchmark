@@ -1,0 +1,27 @@
+"""Tests for jev_bench.web.routes.catalog."""
+
+import pytest
+from tests.factories import AppFactory, FakeOpenRouter
+
+
+def test_catalog_lists_columns_with_models_and_prices(make_app: AppFactory) -> None:
+    columns = make_app(FakeOpenRouter()).get("/api/catalog").json()
+    by_id = {column["id"]: column for column in columns}
+    assert list(by_id) == ["jev", "anthropic", "embeddings"]
+    anthropic = by_id["anthropic"]
+    assert anthropic["default_model"] == "anthropic/claude-sonnet-5"
+    assert [model["id"] for model in anthropic["models"]] == ["anthropic/claude-sonnet-5"]
+    assert anthropic["models"][0]["prompt_price_per_m"] == pytest.approx(2.0)
+    assert anthropic["models"][0]["max_completion_tokens"] == 128000
+    assert anthropic["error"] is None
+    embeddings = by_id["embeddings"]
+    assert (embeddings["embedding_temperature"], embeddings["emails_per_request"]) == (0.05, 2)
+    assert by_id["jev"]["embedding_temperature"] is None
+
+
+def test_catalog_outage_keeps_the_default_model(make_app: AppFactory) -> None:
+    columns = make_app(FakeOpenRouter(models_status=503)).get("/api/catalog").json()
+    jev = columns[0]
+    assert "503" in jev["error"]
+    assert [model["id"] for model in jev["models"]] == ["typesafe/jev-1.13"]
+    assert jev["models"][0]["name"] == "typesafe/jev-1.13 (default)"
