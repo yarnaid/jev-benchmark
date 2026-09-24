@@ -13,8 +13,19 @@ export function statusBadge(status) {
 
 export function progressBar(done, total, { animated = false } = {}) {
   const percent = total ? Math.round((100 * done) / total) : 0;
-  const bar = h("div", { class: `progress-bar${animated ? " progress-bar-striped progress-bar-animated" : ""}`, style: `width: ${percent}%` }, `${done}/${total}`);
-  return h("div", { class: "progress", role: "progressbar", "aria-valuenow": percent, "aria-valuemin": 0, "aria-valuemax": 100 }, bar);
+  const bar = h(
+    "div",
+    {
+      class: `progress-bar${animated ? " progress-bar-striped progress-bar-animated" : ""}`,
+      style: `width: ${percent}%`,
+      role: "progressbar",
+      "aria-valuenow": percent,
+      "aria-valuemin": 0,
+      "aria-valuemax": 100,
+    },
+    `${done}/${total}`,
+  );
+  return h("div", { class: "progress" }, bar);
 }
 
 export function emptyState(text, iconName = "inbox") {

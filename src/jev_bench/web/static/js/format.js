@@ -1,9 +1,11 @@
 /**
- * Display formatting helpers; every function returns "—" for null/undefined.
+ * Display formatting helpers; every function returns "—" for null/undefined and for non-finite
+ * numbers (NaN, ±Infinity); shortModel additionally returns "—" for any non-string input.
  * Exports: money, duration, pct, fixed, num, when, perMillion, shortModel.
  */
 
-const missing = (value) => value === null || value === undefined;
+const missing = (value) =>
+  value === null || value === undefined || (typeof value === "number" && !Number.isFinite(value));
 
 export function money(usd) {
   if (missing(usd)) return "—";
@@ -21,4 +23,5 @@ export const fixed = (value, digits = 3) => (missing(value) ? "—" : Number(val
 export const num = (value) => (missing(value) ? "—" : Number(value).toLocaleString("en-US"));
 export const when = (iso) => (missing(iso) ? "—" : new Date(iso).toLocaleString());
 export const perMillion = (usd) => (missing(usd) ? "—" : `$${Number(usd).toFixed(2)}`);
-export const shortModel = (id) => (missing(id) ? "—" : id.split("/").pop());
+export const shortModel = (id) =>
+  missing(id) || typeof id !== "string" ? "—" : id.split("/").pop();

@@ -1,5 +1,8 @@
 /**
- * Tiny DOM builder: string children always become text nodes, so untrusted text is never parsed as HTML.
+ * Tiny DOM builder: string children always become text nodes, so untrusted text is never parsed as
+ * HTML. `on*` attributes must be functions (a string value throws, never becomes an inline handler
+ * attribute) and URL attributes (href, src, action, formaction, xlink:href) are scheme-checked,
+ * with an unsafe scheme (javascript:, data:, vbscript:, ...) silently dropped rather than set.
  * Exports: h, clear, icon.
  */
 
@@ -20,15 +23,30 @@ export function icon(name) {
   return h("i", { class: `bi bi-${name}`, "aria-hidden": "true" });
 }
 
+const URL_ATTRS = new Set(["href", "src", "action", "formaction", "xlink:href"]);
+const SAFE_URL_PROTOCOLS = new Set(["http:", "https:", "mailto:", "tel:"]);
+
+function isSafeUrl(value) {
+  try {
+    return SAFE_URL_PROTOCOLS.has(new URL(value, "http://relative.invalid").protocol);
+  } catch {
+    return false;
+  }
+}
+
 function setAttribute(element, name, value) {
   if (value === null || value === undefined || value === false) return;
-  if (name.startsWith("on") && typeof value === "function") {
+  if (name.startsWith("on")) {
+    if (typeof value !== "function") throw new TypeError(`h(): ${name} must be a function`);
     element.addEventListener(name.slice(2).toLowerCase(), value);
-  } else if (name === "dataset") {
-    Object.assign(element.dataset, value);
-  } else {
-    element.setAttribute(name, value === true ? "" : String(value));
+    return;
   }
+  if (name === "dataset") {
+    Object.assign(element.dataset, value);
+    return;
+  }
+  if (URL_ATTRS.has(name) && !isSafeUrl(String(value))) return;
+  element.setAttribute(name, value === true ? "" : String(value));
 }
 
 function appendChildren(element, children) {
