@@ -6,9 +6,11 @@ inside a timed test.
 Fixtures:
     questions: a three-question set covering every question type.
 Hooks:
+    pytest_configure: pre-warm numpy.random module.
     pytest_collection_modifyitems: mark tests listed in tests/slow_tests.txt as `slow`.
 """
 
+import importlib
 from pathlib import Path
 
 import pytest
@@ -23,6 +25,10 @@ def _slow_node_ids() -> set[str]:
         return set()
     lines = (line.strip() for line in _SLOW_LIST.read_text(encoding="utf-8").splitlines())
     return {line for line in lines if line and not line.startswith("#")}
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    importlib.import_module("numpy.random")
 
 
 def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
