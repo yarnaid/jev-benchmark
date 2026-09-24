@@ -183,7 +183,9 @@ def test_resample_index_cache_is_bounded_read_only_and_deterministic() -> None:
     first = index_for(5)
     assert not first.flags.writeable
     assert index_for(5) is first
-    for n in (6, 7, 8, 9, 5):
-        evicted = index_for(n)
-        assert evicted.shape == (10, n)
-    assert index_for(5).tolist() == resample_index_cache(resamples=10, seed=0)(5).tolist()
+    for n in (6, 7, 8, 9):
+        assert index_for(n).shape == (10, n)
+    again = index_for(5)
+    assert again is not first
+    assert again.tolist() == first.tolist()
+    assert again.tolist() == resample_index_cache(resamples=10, seed=0)(5).tolist()

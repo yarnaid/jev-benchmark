@@ -3,8 +3,8 @@
 Types:
     RaterKind, Column
 Classes:
-    Rater: named source of distributions, with `.hard`, `.supports(question)` and
-        `.column(question_id)`.
+    Rater: named source of distributions, with `.hard`, `.supports(question)`,
+        `.column(question_id)` and `.warnings` (notes on answers dropped while building it).
 Functions:
     run_label: display label of a run ("column · model · mode").
     run_rater: build a rater from a run's predictions, skipping failed or answerless emails.

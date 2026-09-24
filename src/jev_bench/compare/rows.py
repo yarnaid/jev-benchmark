@@ -1,5 +1,7 @@
 """Per-email view: each run's top answer per question, and the cross-run disagreement index.
 
+Types:
+    SupportedQuestions: rater id -> question ids it supports (precomputed once per call).
 Classes:
     EmailRow: one email's traits, reference/human labels, per-run top answers and disagreement.
 Functions:
