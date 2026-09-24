@@ -3,14 +3,18 @@
 Classes:
     PartyFactory: named mailbox.
     EmailFactory: generated email with deterministic ids and a fixed sent_at.
+Types:
+    ClientFactory: type of the make_client fixture.
 """
 
+from collections.abc import Callable
 from datetime import UTC, datetime
 
 from factory.base import Factory
 from factory.declarations import LazyFunction, Sequence, SubFactory
 
 from jev_bench.emails import Email, Party
+from jev_bench.openrouter import OpenRouterClient
 
 
 class PartyFactory(Factory[Party]):
@@ -37,3 +41,6 @@ class EmailFactory(Factory[Email]):
     reference_answers = LazyFunction(
         lambda: {"category": "spam", "urgency": "today", "needs_reply": "yes"}
     )
+
+
+type ClientFactory = Callable[..., OpenRouterClient]
