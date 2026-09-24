@@ -1,18 +1,20 @@
 """Validates a generation request, builds its plan and meta, and starts it as a background job.
 
 Classes:
-    GenerationRequest: what the UI / CLI asks for.
+    GenerationRequest: what the UI / CLI asks for (`models`, if given, is non-empty; items are
+        non-blank).
 Functions:
-    launch_generation: persist the initial meta and start the job; returns (meta, task).
+    launch_generation: persist the initial meta and start the job; returns (meta, task). Raises
+        `ValueError` for a blank api_key, before any meta is saved.
 """
 
 import asyncio
 import secrets
 from collections.abc import Sequence
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Annotated
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, SecretStr
 
 from jev_bench.generation.config import GenerationConfig
 from jev_bench.generation.generator import GeneratorDeps, execute_generation
@@ -31,12 +33,16 @@ class GenerationRequest(BaseModel):
     name: str = Field(default="generation", min_length=1, max_length=80)
     count: int = Field(ge=1, le=2000)
     seed: int | None = Field(default=None, ge=0)
-    models: tuple[str, ...] | None = None
+    models: tuple[Annotated[str, Field(min_length=1)], ...] | None = Field(
+        default=None, min_length=1
+    )
 
 
 async def launch_generation(
     request: GenerationRequest, api_key: str, services: Services, *, now: datetime | None = None
 ) -> tuple[GenerationMeta, asyncio.Task[None]]:
+    if not api_key.strip():
+        raise ValueError("an OpenRouter API key is required")
     config = services.generation_config()
     questions = services.question_set()
     models = request.models or config.models
@@ -47,7 +53,7 @@ async def launch_generation(
     services.generations.save(meta)
     deps = GeneratorDeps(
         client=services.client,
-        api_key=api_key,
+        api_key=SecretStr(api_key),
         store=services.generations,
         questions=questions,
         config=config,

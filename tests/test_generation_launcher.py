@@ -21,6 +21,7 @@ async def test_launch_generation_runs_to_completion(make_services: ServicesFacto
     meta, task = await launch_generation(
         GenerationRequest(name="Spam test", count=4, seed=9), "sk-test", services, now=now
     )
+    assert services.generations.get(meta.id).status == "running"
     await task
     final = services.generations.get(meta.id)
     assert meta.id.startswith("20260924-153012-spam-test-")
@@ -44,6 +45,23 @@ async def test_request_models_override_config_and_seed_is_recorded(
     await task
     assert meta.models == ("custom/model",)
     assert 0 <= meta.seed < 2**31
+    assert services.generations.get(meta.id).seed == meta.seed
+
+
+@pytest.mark.parametrize(
+    "supplied",
+    [
+        pytest.param("", id="empty"),
+        pytest.param("   ", id="blank"),
+    ],
+)
+async def test_launch_generation_requires_an_api_key(
+    make_services: ServicesFactory, supplied: str
+) -> None:
+    services = make_services(_server)
+    with pytest.raises(ValueError, match="API key"):
+        await launch_generation(GenerationRequest(count=1), supplied, services)
+    assert services.generations.list_metas() == []
 
 
 @pytest.mark.parametrize(
@@ -54,6 +72,8 @@ async def test_request_models_override_config_and_seed_is_recorded(
         pytest.param({"count": 1, "unknown": True}, id="extra-field"),
         pytest.param({"count": 1, "name": ""}, id="empty-name"),
         pytest.param({"count": 1, "seed": -1}, id="negative-seed"),
+        pytest.param({"count": 1, "models": ()}, id="empty-models"),
+        pytest.param({"count": 1, "models": ("",)}, id="blank-model"),
     ],
 )
 def test_invalid_requests(payload: dict[str, Any]) -> None:

@@ -247,9 +247,14 @@ def chat_content(body: Mapping[str, Any]) -> str:
     if not choices:
         raise ChatContentError("response has no choices")
     choice = choices[0]
+    if not isinstance(choice, Mapping):
+        raise ChatContentError("choice is not an object")
     if choice.get("finish_reason") == "length":
         raise ChatContentError("response truncated (finish_reason=length)")
-    content = (choice.get("message") or {}).get("content")
+    message = choice.get("message")
+    if not isinstance(message, Mapping):
+        raise ChatContentError("message is not an object")
+    content = message.get("content")
     if not isinstance(content, str) or not content.strip():
         raise ChatContentError("empty response")
     match = _FENCE.match(content.strip())

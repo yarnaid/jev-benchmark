@@ -2,7 +2,7 @@
 
 import pytest
 
-from jev_bench.failures import failure_text
+from jev_bench.failures import failure_text, unwrap_leaf
 from jev_bench.openrouter import OpenRouterError
 
 
@@ -23,7 +23,26 @@ from jev_bench.openrouter import OpenRouterError
             id="openrouter-in-group",
         ),
         pytest.param(ValueError(""), "ValueError", id="empty-message"),
+        pytest.param(
+            ExceptionGroup("group", [KeyError("x")]), "KeyError: 'x'", id="key-error-in-group"
+        ),
     ],
 )
 def test_failure_text(exc: BaseException, expected: str) -> None:
     assert failure_text(exc) == expected
+
+
+@pytest.mark.parametrize(
+    ("exc", "expected_type"),
+    [
+        pytest.param(KeyError("x"), KeyError, id="plain"),
+        pytest.param(ExceptionGroup("g", [KeyError("x")]), KeyError, id="one-level"),
+        pytest.param(
+            ExceptionGroup("g", [ExceptionGroup("inner", [ValueError("v")])]),
+            ValueError,
+            id="nested",
+        ),
+    ],
+)
+def test_unwrap_leaf(exc: BaseException, expected_type: type[BaseException]) -> None:
+    assert type(unwrap_leaf(exc)) is expected_type

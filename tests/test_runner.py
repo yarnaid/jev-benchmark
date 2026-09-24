@@ -5,12 +5,14 @@ import contextlib
 from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 import pytest
 from tests.factories import EmailFactory
 
 from jev_bench.benchmark_config import ColumnKind, EmbeddingParams, JevParams
 from jev_bench.classifiers.base import (
+    Classifier,
     EmailOutcome,
     PrepareResult,
     ProgressCallback,
@@ -120,7 +122,7 @@ def _meta(questions: QuestionSet, kind: ColumnKind = "decisions", n_emails: int 
 async def _run(
     tmp_path: Path,
     questions: QuestionSet,
-    classifier: FakeClassifier,
+    classifier: Classifier,
     emails: list[Email],
     kind: ColumnKind = "decisions",
 ) -> tuple[RunMeta, JobProgress, RunStore]:
@@ -323,3 +325,36 @@ def test_mark_interrupted_runs(tmp_path: Path, questions: QuestionSet) -> None:
     assert interrupted.total_cost == pytest.approx(0.1)
     assert store.get(live.id).status == "running"
     assert store.get(done.id).status == "completed"
+
+
+class _KeyLeakingClassifier:
+    def __init__(self, api_key: str) -> None:
+        self._api_key = api_key
+        self.emails_per_request = 1
+        self.concurrency = 1
+        self.budget = Budget(total=10_000)
+        self.sizing = Sizing()
+
+    def input_tokens(self, email: Email) -> int:
+        return 10
+
+    async def prepare(self, emails: Sequence[Email]) -> PrepareResult:
+        return PrepareResult(pending=tuple(emails))
+
+    async def classify(
+        self, emails: Sequence[Email], on_progress: ProgressCallback | None = None
+    ) -> RequestResult:
+        return await _fatal_request(self._api_key)
+
+
+async def _fatal_request(api_key: str) -> RequestResult:
+    raise OpenRouterError("HTTP 402: insufficient credits", status=402)
+
+
+async def test_fatal_failure_never_logs_the_api_key(
+    tmp_path: Path, questions: QuestionSet, log_records: list[Any]
+) -> None:
+    secret = "sk-or-v1-RUNNERSECRET-1337"
+    final, _, _ = await _run(tmp_path, questions, _KeyLeakingClassifier(secret), [EmailFactory()])
+    assert final.status == "failed"
+    assert not any(secret in record for record in log_records)

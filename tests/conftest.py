@@ -7,22 +7,28 @@ Fixtures:
     questions: a three-question set covering every question type.
     make_client: async OpenRouterClient factory.
     make_services: async Services factory on tmp dirs.
+    log_records: worst-case loguru sink (diagnose=True, backtrace=True) for leak regression tests.
 Hooks:
     pytest_configure: pre-warm numpy.random module.
     pytest_collection_modifyitems: mark tests listed in tests/slow_tests.txt as `slow`.
 """
 
 import importlib
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator, Callable, Iterator
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import httpx2
 import pytest
+from loguru import logger
 from tests.factories import ClientFactory, ServicesFactory, mini_settings
 
 from jev_bench.openrouter import OpenRouterClient
 from jev_bench.questions import ChoiceQuestion, NoulQuestion, QuestionSet, ScoreQuestion
 from jev_bench.services import Services
+
+if TYPE_CHECKING:
+    from loguru import Message
 
 _SLOW_LIST = Path(__file__).with_name("slow_tests.txt")
 type Handler = Callable[[httpx2.Request], httpx2.Response]
@@ -87,6 +93,16 @@ async def make_client() -> AsyncIterator[ClientFactory]:
     yield build
     for http in opened:
         await http.aclose()
+
+
+@pytest.fixture
+def log_records() -> Iterator[list[Message]]:
+    records: list[Message] = []
+    handler_id = logger.add(records.append, level="DEBUG", diagnose=True, backtrace=True)
+    try:
+        yield records
+    finally:
+        logger.remove(handler_id)
 
 
 @pytest.fixture

@@ -3,22 +3,26 @@
 Constants:
     CHECKPOINT_EVERY: persist running totals after this many completed emails.
 Classes:
-    GeneratorDeps: collaborators of a generation job.
+    GeneratorDeps: collaborators of a generation job (`api_key` is a `SecretStr`, never persisted).
 Functions:
     execute_generation: job body (always finalizes the meta; re-raises only CancelledError).
-    mark_interrupted_generations: startup sweep for generations left `running`.
+    mark_interrupted_generations: startup sweep for generations left `running`; recomputes `done`
+        and `trait_mismatches` from the emails on disk, `errors`/`total_cost` stay at the last
+        checkpoint.
 """
 
 import asyncio
 import time
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
-from typing import Any, NamedTuple
+from typing import NamedTuple
 
 from loguru import logger
+from pydantic import SecretStr
 
+from jev_bench.classifiers.base import usage_from_body
 from jev_bench.emails import Email, email_id
-from jev_bench.failures import failure_text
+from jev_bench.failures import failure_text, unwrap_leaf
 from jev_bench.generation.config import GenerationConfig
 from jev_bench.generation.plan import PlanItem, ResolvedTrait, resolve_traits
 from jev_bench.generation.prompt import (
@@ -46,7 +50,7 @@ CHECKPOINT_EVERY = 10
 
 class GeneratorDeps(NamedTuple):
     client: OpenRouterClient
-    api_key: str
+    api_key: SecretStr
     store: GenerationStore
     questions: QuestionSet
     config: GenerationConfig
@@ -68,10 +72,19 @@ async def execute_generation(
         _finish(deps.store, meta, progress, tally, cancel_status(exc), None, started)
         raise
     except Exception as exc:
-        logger.bind(generation=meta.id).opt(exception=exc).error("generation failed")
-        _finish(deps.store, meta, progress, tally, "failed", failure_text(exc), started)
+        text = failure_text(exc)
+        _log_job_failure(meta.id, exc, text)
+        _finish(deps.store, meta, progress, tally, "failed", text, started)
         return
     _finish(deps.store, meta, progress, tally, "completed", None, started)
+
+
+def _log_job_failure(generation_id: str, exc: Exception, text: str) -> None:
+    bound = logger.bind(generation=generation_id)
+    if isinstance(unwrap_leaf(exc), OpenRouterError):
+        bound.error(text)
+    else:
+        bound.opt(exception=exc).error("generation failed")
 
 
 async def _generate_all(
@@ -104,7 +117,7 @@ async def _generate_one(
     try:
         async with semaphore:
             response = await _call(item, traits, response_format, deps)
-        progress.cost += _cost(response.body)
+        progress.cost += usage_from_body(response.body.get("usage"), None).cost
         email, mismatched = _to_email(meta.id, item, traits, response, deps.questions)
     except OpenRouterError as exc:
         if exc.fatal:
@@ -131,7 +144,7 @@ async def _call(
         "response_format": response_format,
         "provider": {"require_parameters": True},
     }
-    return await deps.client.post_json(CHAT_PATH, body, api_key=deps.api_key)
+    return await deps.client.post_json(CHAT_PATH, body, api_key=deps.api_key.get_secret_value())
 
 
 def _to_email(
@@ -179,12 +192,6 @@ def _item_failed(generation_id: str, item: PlanItem, message: str, progress: Job
     )
 
 
-def _cost(body: Mapping[str, Any]) -> float:
-    usage = body.get("usage")
-    cost = usage.get("cost") if isinstance(usage, dict) else None
-    return float(cost) if isinstance(cost, int | float) and not isinstance(cost, bool) else 0.0
-
-
 def _totals(meta: GenerationMeta, progress: JobProgress, tally: _Tally) -> GenerationMeta:
     update = {
         "done": progress.done,
@@ -220,7 +227,18 @@ def mark_interrupted_generations(
         meta for meta in store.list_metas() if meta.status == "running" and not is_live(meta.id)
     ]
     for meta in orphaned:
-        store.save(
-            meta.model_copy(update={"status": "interrupted", "done": len(store.emails(meta.id))})
-        )
+        store.save(meta.model_copy(update=_recovered_totals(store, meta)))
     return [meta.id for meta in orphaned]
+
+
+def _recovered_totals(store: GenerationStore, meta: GenerationMeta) -> dict[str, object]:
+    emails = store.emails(meta.id)
+    traits = resolve_traits(meta.config, meta.question_set)
+    mismatches = sum(
+        count_mismatches(_as_plan_item(email), traits, email.reference_answers) for email in emails
+    )
+    return {"status": "interrupted", "done": len(emails), "trait_mismatches": mismatches}
+
+
+def _as_plan_item(email: Email) -> PlanItem:
+    return PlanItem.model_construct(index=0, model="", sent_at=email.sent_at, traits=email.traits)

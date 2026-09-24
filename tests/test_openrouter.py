@@ -247,6 +247,8 @@ def test_chat_content(body: dict[str, Any], expected: str) -> None:
         pytest.param(_body('{"a"', "length"), "truncated", id="truncated"),
         pytest.param(_body("   "), "empty", id="blank"),
         pytest.param(_body(None), "empty", id="none"),
+        pytest.param({"choices": [None]}, "not an object", id="choice-not-object"),
+        pytest.param({"choices": [{"message": "x"}]}, "not an object", id="message-not-object"),
     ],
 )
 def test_chat_content_errors(body: dict[str, Any], message: str) -> None:
