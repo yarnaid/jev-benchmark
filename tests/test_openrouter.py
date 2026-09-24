@@ -200,6 +200,19 @@ async def test_post_stream_accepts_data_without_space(make_client: ClientFactory
         ),
         pytest.param(_json(401, {"error": {"message": "no auth"}}), 401, True, id="http-401"),
         pytest.param(_sse("data: {not json"), None, False, id="invalid-chunk"),
+        pytest.param(
+            _sse(_chunk(choices=["not-an-object"])), None, False, id="choice-not-an-object"
+        ),
+        pytest.param(
+            _sse(_chunk(choices=[{"delta": "oops"}])), None, False, id="delta-not-an-object"
+        ),
+        pytest.param(_sse(_chunk(choices={"a": 1})), None, False, id="choices-not-a-list"),
+        pytest.param(
+            _sse(_chunk(choices=[{"delta": {"content": [1, 2]}}])),
+            None,
+            False,
+            id="content-not-a-string",
+        ),
     ],
 )
 async def test_post_stream_errors(

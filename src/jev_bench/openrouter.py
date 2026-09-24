@@ -157,11 +157,21 @@ class _StreamAccumulator:
         keys = ("id", "model", "provider")
         self._meta.update({key: chunk[key] for key in keys if chunk.get(key)})
         self._usage = chunk.get("usage") or self._usage
-        for choice in chunk.get("choices") or []:
+        choices = chunk.get("choices") or []
+        if not isinstance(choices, list):
+            raise OpenRouterError("malformed stream chunk: choices is not a list", retryable=True)
+        for choice in choices:
             self._absorb_choice(choice)
 
-    def _absorb_choice(self, choice: JsonObject) -> None:
-        text = (choice.get("delta") or {}).get("content") or ""
+    def _absorb_choice(self, choice: object) -> None:
+        if not isinstance(choice, Mapping):
+            raise OpenRouterError("malformed stream chunk: choice is not an object", retryable=True)
+        delta = choice.get("delta") or {}
+        if not isinstance(delta, Mapping):
+            raise OpenRouterError("malformed stream chunk: delta is not an object", retryable=True)
+        text = delta.get("content") or ""
+        if not isinstance(text, str):
+            raise OpenRouterError("malformed stream chunk: content is not a string", retryable=True)
         if text:
             self._parts.append(text)
             if self._on_text is not None:
