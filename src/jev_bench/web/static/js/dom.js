@@ -36,16 +36,17 @@ function isSafeUrl(value) {
 
 function setAttribute(element, name, value) {
   if (value === null || value === undefined || value === false) return;
-  if (name.startsWith("on")) {
+  const key = name.toLowerCase();
+  if (key.startsWith("on")) {
     if (typeof value !== "function") throw new TypeError(`h(): ${name} must be a function`);
-    element.addEventListener(name.slice(2).toLowerCase(), value);
+    element.addEventListener(key.slice(2), value);
     return;
   }
   if (name === "dataset") {
     Object.assign(element.dataset, value);
     return;
   }
-  if (URL_ATTRS.has(name) && !isSafeUrl(String(value))) return;
+  if (URL_ATTRS.has(key) && !isSafeUrl(String(value))) return;
   element.setAttribute(name, value === true ? "" : String(value));
 }
 

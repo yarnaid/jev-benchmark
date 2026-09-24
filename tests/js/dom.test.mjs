@@ -62,9 +62,18 @@ test("a function on* attribute becomes an event listener, not an HTML attribute"
   assert.equal(el.hasAttribute("onclick"), false);
 });
 
-test("a string on* attribute throws TypeError instead of becoming an inline handler", () => {
-  assert.throws(() => h("button", { onclick: "doStuff()" }), TypeError);
-});
+for (const name of ["onclick", "ONCLICK", "onClick"]) {
+  test(`a string ${name} attribute throws TypeError instead of becoming an inline handler`, () => {
+    assert.throws(() => h("button", { [name]: "doStuff()" }), TypeError);
+  });
+}
+
+for (const name of ["HREF", "Src"]) {
+  test(`an unsafe URL is dropped whatever the attribute name's case: ${name}`, () => {
+    const el = h("a", { [name]: "javascript:alert(1)" });
+    assert.equal(el.hasAttribute(name), false);
+  });
+}
 
 const UNSAFE_HREFS = [
   "javascript:alert(1)",
