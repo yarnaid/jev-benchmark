@@ -51,8 +51,13 @@ node --test tests/js/                           # JS unit tests (Node's runner, 
   (`prompt.py`), then the job (`generator.py`). The generator's own answers become `reference_answers`.
 - **Persistence**: JSON/JSONL under `data/` (`store/`). `data/embeddings/` is a gitignored per-model vector
   cache keyed by sha256 of the exact input text.
+  - Each `EmbeddingCache` loads its vectors once per process (`EmbeddingCache._load`), so a CLI run and a
+    running web server don't see each other's newly cached vectors until restart; results are unaffected,
+    but the embedding cost may be paid twice.
   - Runs and generations left `running` become `interrupted` when the web server starts
-    (`Services.sweep_interrupted`; the CLI does not sweep).
+    (`Services.sweep_interrupted`; the CLI does not sweep). This sweep can transiently mark a CLI job that
+    is still actually running as `interrupted`; the CLI job's own `_finish` rewrites the final status when
+    it completes, so the persisted status ends up correct either way.
 - **Comparison** (`compare/`: `raters.py`, `pairs.py`, `report.py`, `rows.py`; pure numpy via `metrics/`):
   - raters are runs, the generator reference and optional human labels; a rater whose question-set
     snapshot is incompatible with the base is skipped with a warning;
