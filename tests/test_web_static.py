@@ -13,6 +13,7 @@ from jev_bench.web.app import STATIC_DIR
 FORBIDDEN_SINKS = re.compile(r"\binnerHTML\b|\bouterHTML\b|insertAdjacentHTML|document\.write")
 IMPORT = re.compile(r"""from\s+["'](\./[^"']+)["']""")
 SHELL_MODULES = ("dom.js", "format.js", "storage.js", "key.js", "api.js", "layout.js", "widgets.js")
+PAGE_MODULES = ("benchmark.js", "report.js", "charts.js")
 
 
 class TagCollector(HTMLParser):
@@ -48,6 +49,10 @@ def _parse(page: Path) -> TagCollector:
 def test_shell_modules_exist() -> None:
     assert [name for name in SHELL_MODULES if not (STATIC_DIR / "js" / name).exists()] == []
     assert (STATIC_DIR / "css" / "app.css").exists()
+
+
+def test_page_modules_exist() -> None:
+    assert [name for name in PAGE_MODULES if not (STATIC_DIR / "js" / name).exists()] == []
 
 
 def test_javascript_has_no_html_injection_sinks() -> None:
