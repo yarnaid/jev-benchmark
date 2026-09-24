@@ -3,7 +3,8 @@
 Constants:
     CSP: Content-Security-Policy value.
 Functions:
-    security_headers: HTTP middleware adding CSP, nosniff and no-referrer headers.
+    apply_security_headers: set CSP, nosniff and no-referrer headers on a response.
+    security_headers: HTTP middleware applying apply_security_headers to every handled response.
 """
 
 from collections.abc import Awaitable, Callable
@@ -26,11 +27,14 @@ CSP = "; ".join(
 )
 
 
-async def security_headers(
-    request: Request, call_next: Callable[[Request], Awaitable[Response]]
-) -> Response:
-    response = await call_next(request)
+def apply_security_headers(response: Response) -> Response:
     response.headers["Content-Security-Policy"] = CSP
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["Referrer-Policy"] = "no-referrer"
     return response
+
+
+async def security_headers(
+    request: Request, call_next: Callable[[Request], Awaitable[Response]]
+) -> Response:
+    return apply_security_headers(await call_next(request))

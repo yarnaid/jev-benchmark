@@ -4,7 +4,7 @@ import sys
 from collections.abc import Iterator
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, cast
+from typing import NoReturn
 
 import httpx2
 import pytest
@@ -56,6 +56,39 @@ def test_create_default_app_builds_an_app() -> None:
     assert create_default_app().title == "jev-bench"
 
 
+@pytest.mark.parametrize(
+    ("owned", "expect_closed"),
+    [
+        pytest.param(True, True, id="owned-client-closed-on-failed-startup"),
+        pytest.param(False, False, id="injected-client-not-closed-on-failed-startup"),
+    ],
+)
+def test_lifespan_closes_only_the_owned_client_on_failed_startup(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, owned: bool, expect_closed: bool
+) -> None:
+    settings = mini_settings(tmp_path)
+    closed = {"value": False}
+    client = httpx2.AsyncClient(transport=httpx2.MockTransport(FakeOpenRouter()))
+    real_aclose = client.aclose
+
+    async def spy_aclose() -> None:
+        closed["value"] = True
+        await real_aclose()
+
+    monkeypatch.setattr(client, "aclose", spy_aclose)
+    monkeypatch.setattr(web_app, "build_http_client", lambda _settings: client)
+
+    def _raise(*args: object, **kwargs: object) -> NoReturn:
+        raise RuntimeError("boom-startup")
+
+    monkeypatch.setattr(web_app, "Services", _raise)
+
+    app = create_app(settings, http=None if owned else client)
+    with pytest.raises(RuntimeError, match="boom-startup"), TestClient(app):
+        pass
+    assert closed["value"] is expect_closed
+
+
 @pytest.fixture
 def _restore_default_logging() -> Iterator[None]:
     try:
@@ -65,13 +98,27 @@ def _restore_default_logging() -> Iterator[None]:
         logger.add(sys.stderr)
 
 
+def _fail_with_api_key(api_key: str) -> None:
+    raise RuntimeError("boom")
+
+
+def _call_with_local_secret(secret: str) -> None:
+    _fail_with_api_key(api_key=secret)
+
+
 @pytest.mark.usefixtures("_restore_default_logging")
 def test_create_default_app_configures_logging_before_building_the_app(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     monkeypatch.setattr(web_app, "load_settings", lambda: mini_settings(tmp_path))
     create_default_app()
-    handlers = list(cast(Any, logger)._core.handlers.values())
-    assert len(handlers) == 1
-    assert handlers[0]._exception_formatter._diagnose is False
+    secret = "sk-or-v1-SUPERSECRET"
+    try:
+        _call_with_local_secret(secret)
+    except RuntimeError as exc:
+        logger.opt(exception=exc).error("job failed")
+    captured = capsys.readouterr()
+    assert "job failed" in captured.err
+    assert secret not in captured.err
