@@ -22,6 +22,15 @@ from jev_bench.generation.plan import PlanItem, ResolvedTrait
 from jev_bench.json_schema import JsonSchema, strict_object
 from jev_bench.questions import QuestionSet, render_questions
 
+__all__ = [
+    "GeneratedEmail",
+    "GeneratorOutput",
+    "count_mismatches",
+    "generation_schema",
+    "parse_generator_output",
+    "render_prompts",
+]
+
 _PARTY: JsonSchema = strict_object({"name": {"type": "string"}, "address": {"type": "string"}})
 
 

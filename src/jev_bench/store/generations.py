@@ -18,6 +18,13 @@ from jev_bench.questions import QuestionSet
 from jev_bench.store.jsonfiles import append_jsonl, read_json, read_jsonl, write_json_atomic
 from jev_bench.store.status import JobStatus
 
+__all__ = [
+    "EMAILS_FILE",
+    "META_FILE",
+    "GenerationMeta",
+    "GenerationStore",
+]
+
 META_FILE = "generation.json"
 EMAILS_FILE = "emails.jsonl"
 

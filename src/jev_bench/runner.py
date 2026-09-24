@@ -31,6 +31,13 @@ from jev_bench.request_plan import RequestPlan, chunk_by_count, plan_requests
 from jev_bench.store.runs import Prediction, ResponseRecord, RunMeta, RunStore
 from jev_bench.store.status import JobStatus
 
+__all__ = [
+    "OVERSIZE_ERROR",
+    "execute_run",
+    "mark_interrupted_runs",
+    "summarize",
+]
+
 OVERSIZE_ERROR = "exceeds model limits; not sent"
 
 

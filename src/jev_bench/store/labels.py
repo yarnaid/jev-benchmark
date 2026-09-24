@@ -11,6 +11,11 @@ from pathlib import Path
 from jev_bench.ids import is_safe_id, split_email_id
 from jev_bench.store.jsonfiles import read_json, write_json_atomic
 
+__all__ = [
+    "LabelStore",
+    "Labels",
+]
+
 type Labels = dict[str, dict[str, str]]
 
 

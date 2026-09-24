@@ -18,6 +18,16 @@ from jev_bench.store.runs import RunMeta
 from jev_bench.web.deps import ApiKeyDep, ServicesDep, split_ids
 from jev_bench.web.views import CancelView, load_or_404
 
+__all__ = [
+    "LIGHT",
+    "RunView",
+    "cancel_run",
+    "create_run",
+    "get_run",
+    "list_runs",
+    "router",
+]
+
 router = APIRouter(tags=["runs"])
 LIGHT = {"meta": {"question_set", "params"}}
 

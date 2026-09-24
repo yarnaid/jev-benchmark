@@ -14,6 +14,11 @@ from loguru import logger
 from jev_bench.jobs import describe_error, unwrap_leaf
 from jev_bench.openrouter import OpenRouterError
 
+__all__ = [
+    "failure_text",
+    "log_job_failure",
+]
+
 
 def failure_text(exc: BaseException) -> str:
     leaf = unwrap_leaf(exc)

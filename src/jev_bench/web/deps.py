@@ -16,6 +16,15 @@ from fastapi import Depends, Header, HTTPException, Request
 
 from jev_bench.services import Services
 
+__all__ = [
+    "NO_KEY_DETAIL",
+    "ApiKeyDep",
+    "ServicesDep",
+    "get_services",
+    "require_api_key",
+    "split_ids",
+]
+
 NO_KEY_DETAIL = (
     "OpenRouter API key is not configured: "
     "set OPENROUTER_API_KEY on the server or enter a key in the UI."

@@ -41,6 +41,10 @@ from jev_bench.questions import QuestionSet, render_questions
 from jev_bench.request_plan import Sizing
 from jev_bench.tokens import chat_budget, estimate_tokens
 
+__all__ = [
+    "LlmClassifier",
+]
+
 _REF_BYTES = len('{"ref":"e0000",},') + len('"e0000",')
 
 

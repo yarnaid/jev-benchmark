@@ -6,6 +6,11 @@ Functions:
 
 from typing import Any
 
+__all__ = [
+    "JsonSchema",
+    "strict_object",
+]
+
 type JsonSchema = dict[str, Any]
 
 

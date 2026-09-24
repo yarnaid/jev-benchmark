@@ -11,6 +11,12 @@ from collections.abc import Sequence
 from jev_bench.json_schema import JsonSchema, strict_object
 from jev_bench.questions import AnyQuestion, NoulQuestion, QuestionSet
 
+__all__ = [
+    "all_in_one_schema",
+    "answers_schema",
+    "email_refs",
+]
+
 
 def answers_schema(questions: QuestionSet) -> JsonSchema:
     properties = {question.id: _question_schema(question) for question in questions.questions}

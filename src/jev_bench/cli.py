@@ -15,6 +15,14 @@ from typing import Annotated
 
 import typer
 
+__all__ = [
+    "LOOPBACK",
+    "app",
+    "generate",
+    "run",
+    "serve",
+]
+
 app = typer.Typer(
     no_args_is_help=True,
     add_completion=False,

@@ -20,6 +20,13 @@ from jev_bench.emails import Email
 from jev_bench.metrics.distributions import js_divergence, to_matrix
 from jev_bench.questions import AnyQuestion, Distribution, QuestionSet
 
+__all__ = [
+    "EmailRow",
+    "SupportedQuestions",
+    "disagreement_index",
+    "email_rows",
+]
+
 type SupportedQuestions = Mapping[str, frozenset[str]]
 
 

@@ -38,6 +38,13 @@ from jev_bench.questions import QuestionSet
 from jev_bench.runner import execute_run
 from jev_bench.store.runs import RunMeta, RunMode
 
+__all__ = [
+    "RunLaunchError",
+    "RunRequest",
+    "build_classifier",
+    "launch_run",
+]
+
 if TYPE_CHECKING:
     from jev_bench.services import Services
 

@@ -9,6 +9,11 @@ import numpy as np
 
 from jev_bench.metrics.distributions import FloatArray, IntArray
 
+__all__ = [
+    "percentile_ci",
+    "resample_index",
+]
+
 
 def resample_index(n: int, *, resamples: int = 1000, seed: int = 0) -> IntArray:
     return np.random.default_rng(seed).integers(0, n, size=(resamples, n), dtype=np.int64)

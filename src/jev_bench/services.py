@@ -20,6 +20,10 @@ from jev_bench.store.generations import GenerationStore
 from jev_bench.store.labels import LabelStore
 from jev_bench.store.runs import RunStore
 
+__all__ = [
+    "Services",
+]
+
 
 class Services:
     def __init__(self, settings: Settings, http: httpx2.AsyncClient) -> None:

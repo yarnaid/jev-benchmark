@@ -16,6 +16,13 @@ from jev_bench.classifiers.base import ProgressCallback
 from jev_bench.metrics.distributions import normalize, unit_probability
 from jev_bench.questions import AnyQuestion, Distribution, NoulQuestion, QuestionSet
 
+__all__ = [
+    "REF_KEY",
+    "RefCounter",
+    "parse_email_answers",
+    "split_results",
+]
+
 REF_KEY = '"ref"'
 
 

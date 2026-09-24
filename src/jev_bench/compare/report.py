@@ -30,6 +30,14 @@ from jev_bench.metrics.distributions import IntArray, argmax_labels, entropy, ex
 from jev_bench.questions import AnyQuestion, QuestionSet
 from jev_bench.store.runs import RunMeta
 
+__all__ = [
+    "ComparisonReport",
+    "QuestionReport",
+    "RaterStats",
+    "RaterSummary",
+    "compare",
+]
+
 
 class RaterStats(BaseModel):
     rater: str

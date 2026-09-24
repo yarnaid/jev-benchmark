@@ -21,6 +21,21 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from jev_bench.templates import check_template
 
+__all__ = [
+    "EMAIL_PLACEHOLDERS",
+    "OPTION_PLACEHOLDERS",
+    "BenchmarkConfig",
+    "ChatMode",
+    "ColumnConfig",
+    "ColumnKind",
+    "EmbeddingParams",
+    "JevParams",
+    "LlmParams",
+    "Modality",
+    "TokenParams",
+    "load_benchmark_config",
+]
+
 type ColumnKind = Literal["decisions", "chat", "embeddings"]
 type ChatMode = Literal["per_email", "all_in_one"]
 type Modality = Literal["text", "decisions", "embeddings"]

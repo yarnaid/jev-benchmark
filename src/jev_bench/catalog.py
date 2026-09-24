@@ -19,6 +19,14 @@ from pydantic import BaseModel, ConfigDict
 from jev_bench.benchmark_config import ColumnConfig, Modality
 from jev_bench.openrouter import OpenRouterClient
 
+__all__ = [
+    "MODELS_PATH",
+    "Catalog",
+    "ModelInfo",
+    "parse_model",
+    "select_models",
+]
+
 MODELS_PATH = "/v1/models"
 
 

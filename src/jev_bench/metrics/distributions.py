@@ -20,6 +20,19 @@ from collections.abc import Mapping, Sequence
 import numpy as np
 from numpy.typing import NDArray
 
+__all__ = [
+    "FloatArray",
+    "IntArray",
+    "argmax_labels",
+    "entropy",
+    "expected_level",
+    "js_divergence",
+    "normalize",
+    "softmax",
+    "to_matrix",
+    "unit_probability",
+]
+
 type FloatArray = NDArray[np.float64]
 type IntArray = NDArray[np.int64]
 

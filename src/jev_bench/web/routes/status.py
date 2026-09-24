@@ -11,6 +11,12 @@ from pydantic import BaseModel
 
 from jev_bench.web.deps import ServicesDep
 
+__all__ = [
+    "StatusView",
+    "router",
+    "status",
+]
+
 router = APIRouter(tags=["status"])
 
 

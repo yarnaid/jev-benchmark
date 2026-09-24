@@ -25,6 +25,12 @@ from jev_bench.settings import Settings, load_settings
 from jev_bench.web.routes import ROUTERS
 from jev_bench.web.security import apply_security_headers, security_headers
 
+__all__ = [
+    "STATIC_DIR",
+    "create_app",
+    "create_default_app",
+]
+
 STATIC_DIR = Path(__file__).parent / "static"
 
 

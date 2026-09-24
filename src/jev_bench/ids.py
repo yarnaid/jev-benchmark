@@ -11,6 +11,13 @@ import re
 import secrets
 from datetime import UTC, datetime
 
+__all__ = [
+    "is_safe_id",
+    "new_id",
+    "slugify",
+    "split_email_id",
+]
+
 _SAFE_ID = re.compile(r"\d{8}-\d{6}-[a-z0-9-]+")
 _EMAIL_ID = re.compile(r"(?P<generation>\d{8}-\d{6}-[a-z0-9-]+)\.(?P<index>\d{4,})")
 

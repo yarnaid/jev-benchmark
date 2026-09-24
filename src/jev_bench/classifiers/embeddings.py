@@ -37,6 +37,14 @@ from jev_bench.request_plan import Sizing, chunk_by_count
 from jev_bench.store.embeddings import CachedVector, EmbeddingCache, encode_vector, text_key
 from jev_bench.tokens import embedding_budget, estimate_tokens
 
+__all__ = [
+    "EMBEDDINGS_PATH",
+    "CacheItem",
+    "EmbeddingClassifier",
+    "email_text",
+    "option_texts",
+]
+
 EMBEDDINGS_PATH = "/v1/embeddings"
 
 type CacheItem = tuple[Literal["option", "email"], str, str]

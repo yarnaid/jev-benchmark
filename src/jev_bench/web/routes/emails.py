@@ -19,6 +19,14 @@ from jev_bench.store.runs import Prediction
 from jev_bench.web.deps import ServicesDep, split_ids
 from jev_bench.web.loaders import load_email, load_emails, load_runs, run_raters
 
+__all__ = [
+    "EmailDetail",
+    "EmailList",
+    "email_detail",
+    "list_emails",
+    "router",
+]
+
 router = APIRouter(tags=["emails"])
 
 

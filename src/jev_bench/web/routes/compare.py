@@ -19,6 +19,12 @@ from jev_bench.web.loaders import (
     run_raters,
 )
 
+__all__ = [
+    "LIGHT",
+    "compare_runs",
+    "router",
+]
+
 router = APIRouter(tags=["compare"])
 LIGHT = {"raters": {"__all__": {"run": {"question_set", "params"}}}}
 

@@ -15,6 +15,13 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from jev_bench.templates import check_template
 
+__all__ = [
+    "GenerationConfig",
+    "Trait",
+    "TraitValue",
+    "load_generation_config",
+]
+
 
 class _Frozen(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")

@@ -7,6 +7,10 @@ Functions:
 from collections.abc import Collection
 from string import Template
 
+__all__ = [
+    "check_template",
+]
+
 
 def check_template(template: str, allowed: Collection[str]) -> str:
     parsed = Template(template)

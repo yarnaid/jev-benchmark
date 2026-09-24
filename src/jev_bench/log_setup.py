@@ -9,6 +9,10 @@ import sys
 
 from loguru import logger
 
+__all__ = [
+    "configure_logging",
+]
+
 
 def configure_logging(*, debug: bool = False) -> None:
     logger.remove()

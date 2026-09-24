@@ -23,6 +23,16 @@ from jev_bench.emails import Email
 from jev_bench.questions import AnyQuestion, Distribution, QuestionSet, compatible, one_hot
 from jev_bench.store.runs import Prediction, RunMeta
 
+__all__ = [
+    "Column",
+    "Rater",
+    "RaterKind",
+    "human_rater",
+    "reference_rater",
+    "run_label",
+    "run_rater",
+]
+
 type RaterKind = Literal["run", "reference", "human"]
 type Column = dict[str, Distribution]
 

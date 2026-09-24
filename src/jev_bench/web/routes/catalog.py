@@ -17,6 +17,13 @@ from jev_bench.openrouter import OpenRouterError
 from jev_bench.services import Services
 from jev_bench.web.deps import ServicesDep
 
+__all__ = [
+    "CatalogColumn",
+    "CatalogModel",
+    "catalog",
+    "router",
+]
+
 router = APIRouter(tags=["catalog"])
 
 

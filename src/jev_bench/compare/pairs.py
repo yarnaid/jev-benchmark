@@ -40,6 +40,15 @@ from jev_bench.metrics.distributions import (
 )
 from jev_bench.questions import AnyQuestion
 
+__all__ = [
+    "PairStats",
+    "RaterMatrix",
+    "pair_stats",
+    "rater_matrix",
+    "resample_index_cache",
+    "slice_matrix",
+]
+
 
 class PairStats(BaseModel):
     a: str

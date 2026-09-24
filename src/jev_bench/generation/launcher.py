@@ -23,6 +23,11 @@ from jev_bench.ids import new_id
 from jev_bench.questions import QuestionSet
 from jev_bench.store.generations import GenerationMeta
 
+__all__ = [
+    "GenerationRequest",
+    "launch_generation",
+]
+
 if TYPE_CHECKING:
     from jev_bench.services import Services
 

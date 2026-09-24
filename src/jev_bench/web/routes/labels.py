@@ -15,6 +15,12 @@ from jev_bench.questions import QuestionSet
 from jev_bench.web.deps import ServicesDep
 from jev_bench.web.loaders import load_email
 
+__all__ = [
+    "LabelUpdate",
+    "put_label",
+    "router",
+]
+
 router = APIRouter(tags=["labels"])
 
 

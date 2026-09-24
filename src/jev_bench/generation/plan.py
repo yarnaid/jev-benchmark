@@ -17,6 +17,13 @@ from pydantic import AwareDatetime, BaseModel, ConfigDict
 from jev_bench.generation.config import GenerationConfig, Trait, TraitValue
 from jev_bench.questions import QuestionSet
 
+__all__ = [
+    "PlanItem",
+    "ResolvedTrait",
+    "build_plan",
+    "resolve_traits",
+]
+
 
 class ResolvedTrait(BaseModel):
     model_config = ConfigDict(frozen=True)

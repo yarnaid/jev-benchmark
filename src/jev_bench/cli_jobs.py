@@ -23,6 +23,13 @@ from jev_bench.run_launcher import RunLaunchError, RunRequest, launch_run
 from jev_bench.services import Services
 from jev_bench.settings import Settings, load_settings
 
+__all__ = [
+    "NO_KEY",
+    "console",
+    "generate_and_wait",
+    "run_and_wait",
+]
+
 NO_KEY = "OPENROUTER_API_KEY is not set (environment or .env)."
 console = Console(stderr=True)
 

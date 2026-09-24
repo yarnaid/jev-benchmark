@@ -26,6 +26,16 @@ from jev_bench.ids import slugify
 from jev_bench.metrics.distributions import FloatArray
 from jev_bench.store.jsonfiles import append_jsonl, read_jsonl
 
+__all__ = [
+    "VECTORS_FILE",
+    "CachedVector",
+    "EmbeddingCache",
+    "EmbeddingCaches",
+    "decode_vector",
+    "encode_vector",
+    "text_key",
+]
+
 VECTORS_FILE = "vectors.jsonl"
 
 

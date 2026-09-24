@@ -6,4 +6,8 @@ Types:
 
 from typing import Literal
 
+__all__ = [
+    "JobStatus",
+]
+
 type JobStatus = Literal["running", "completed", "cancelled", "failed", "interrupted"]

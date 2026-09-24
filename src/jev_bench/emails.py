@@ -13,6 +13,13 @@ from typing import TypedDict
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 
+__all__ = [
+    "Email",
+    "EmailState",
+    "Party",
+    "email_id",
+]
+
 EmailState = TypedDict(
     "EmailState",
     {"sent_at": str, "from": str, "to": list[str], "cc": list[str], "subject": str, "body": str},

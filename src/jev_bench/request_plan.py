@@ -14,6 +14,13 @@ from typing import NamedTuple
 
 from jev_bench.tokens import Budget
 
+__all__ = [
+    "RequestPlan",
+    "Sizing",
+    "chunk_by_count",
+    "plan_requests",
+]
+
 
 class Sizing(NamedTuple):
     overhead: int = 0

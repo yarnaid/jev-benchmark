@@ -18,6 +18,16 @@ from jev_bench.store.generations import GenerationMeta
 from jev_bench.web.deps import ApiKeyDep, ServicesDep
 from jev_bench.web.views import CancelView, load_or_404
 
+__all__ = [
+    "LIGHT",
+    "GenerationView",
+    "cancel_generation",
+    "create_generation",
+    "get_generation",
+    "list_generations",
+    "router",
+]
+
 router = APIRouter(tags=["generations"])
 LIGHT = {"meta": {"question_set", "config"}}
 
