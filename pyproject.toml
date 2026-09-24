@@ -1,0 +1,78 @@
+[project]
+name = "jev-bench"
+version = "0.1.0"
+description = "Benchmark Jev against chat LLMs and an embedding baseline on email triage via OpenRouter."
+requires-python = ">=3.14"
+dependencies = [
+    "fastapi>=0.141.1",
+    "httpx2>=2.13.1",
+    "loguru>=0.7.3",
+    "numpy>=2.5.3",
+    "pydantic>=2.13.5",
+    "pydantic-settings>=2.15.0",
+    "rich>=15.0.0",
+    "typer>=0.27.2",
+    "uvicorn>=0.53.0",
+]
+
+[project.scripts]
+jev-bench = "jev_bench.cli:app"
+
+[build-system]
+requires = ["uv_build>=0.9.5,<0.10.0"]
+build-backend = "uv_build"
+
+[tool.ruff]
+line-length = 100
+target-version = "py314"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "ANN", "SIM", "RUF", "PT", "ASYNC", "S", "C4"]
+ignore = ["ANN401", "S311"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "S105", "S106", "ANN"]
+
+[tool.pyright]
+pythonVersion = "3.14"
+typeCheckingMode = "standard"
+include = ["src", "tests"]
+venvPath = "."
+venv = ".venv"
+executionEnvironments = [
+  { root = "tests", reportCallIssue = "none" },
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-q -m 'not integration and not slow'"
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+timeout = 1
+markers = [
+  "integration: calls the real OpenRouter API (needs OPENROUTER_API_KEY)",
+  "slow: listed in tests/slow_tests.txt",
+]
+
+[tool.coverage.run]
+source = ["jev_bench"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+exclude_also = ["if TYPE_CHECKING:", "raise AssertionError", "\\.\\.\\."]
+
+[dependency-groups]
+dev = [
+    "factory-boy>=3.3.3",
+    "hypothesis>=6.168.1",
+    "pyright>=1.1.414",
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+    "pytest-cov>=7.1.0",
+    "pytest-timeout>=2.4.0",
+    "ruff>=0.16.8",
+]
