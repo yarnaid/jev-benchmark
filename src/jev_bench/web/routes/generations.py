@@ -4,7 +4,6 @@ Constants:
     LIGHT: response fields excluded from generation views.
 Classes:
     GenerationView: meta + live progress.
-    CancelView: whether a cancel request reached a running job.
 Functions:
     list_generations, create_generation, get_generation, cancel_generation: route handlers.
 """
@@ -17,6 +16,7 @@ from jev_bench.jobs import ProgressView
 from jev_bench.services import Services
 from jev_bench.store.generations import GenerationMeta
 from jev_bench.web.deps import ApiKeyDep, ServicesDep
+from jev_bench.web.views import CancelView, load_or_404
 
 router = APIRouter(tags=["generations"])
 LIGHT = {"meta": {"question_set", "config"}}
@@ -27,20 +27,8 @@ class GenerationView(BaseModel):
     progress: ProgressView | None
 
 
-class CancelView(BaseModel):
-    cancelled: bool
-
-
 def _view(services: Services, meta: GenerationMeta) -> GenerationView:
     return GenerationView(meta=meta, progress=services.jobs.progress(meta.id))
-
-
-def _meta_or_404(services: Services, generation_id: str) -> GenerationMeta:
-    try:
-        return services.generations.get(generation_id)
-    except KeyError as exc:
-        detail = f"unknown generation {generation_id!r}"
-        raise HTTPException(status_code=404, detail=detail) from exc
 
 
 @router.get("/generations", response_model_exclude={"__all__": LIGHT})
@@ -61,10 +49,11 @@ async def create_generation(
 
 @router.get("/generations/{generation_id}", response_model_exclude=LIGHT)
 def get_generation(generation_id: str, services: ServicesDep) -> GenerationView:
-    return _view(services, _meta_or_404(services, generation_id))
+    meta = load_or_404(services.generations.get, generation_id, "generation")
+    return _view(services, meta)
 
 
 @router.post("/generations/{generation_id}/cancel")
 def cancel_generation(generation_id: str, services: ServicesDep) -> CancelView:
-    _meta_or_404(services, generation_id)
+    load_or_404(services.generations.get, generation_id, "generation")
     return CancelView(cancelled=services.jobs.cancel(generation_id))

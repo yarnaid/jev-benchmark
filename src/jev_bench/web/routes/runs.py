@@ -16,7 +16,7 @@ from jev_bench.run_launcher import RunLaunchError, RunRequest, launch_run
 from jev_bench.services import Services
 from jev_bench.store.runs import RunMeta
 from jev_bench.web.deps import ApiKeyDep, ServicesDep, split_ids
-from jev_bench.web.routes.generations import CancelView
+from jev_bench.web.views import CancelView, load_or_404
 
 router = APIRouter(tags=["runs"])
 LIGHT = {"meta": {"question_set", "params"}}
@@ -29,13 +29,6 @@ class RunView(BaseModel):
 
 def _view(services: Services, meta: RunMeta) -> RunView:
     return RunView(meta=meta, progress=services.jobs.progress(meta.id))
-
-
-def _meta_or_404(services: Services, run_id: str) -> RunMeta:
-    try:
-        return services.runs.get(run_id)
-    except KeyError as exc:
-        raise HTTPException(status_code=404, detail=f"unknown run {run_id!r}") from exc
 
 
 @router.get("/runs", response_model_exclude={"__all__": LIGHT})
@@ -58,10 +51,11 @@ async def create_run(request: RunRequest, services: ServicesDep, api_key: ApiKey
 
 @router.get("/runs/{run_id}", response_model_exclude=LIGHT)
 def get_run(run_id: str, services: ServicesDep) -> RunView:
-    return _view(services, _meta_or_404(services, run_id))
+    meta = load_or_404(services.runs.get, run_id, "run")
+    return _view(services, meta)
 
 
 @router.post("/runs/{run_id}/cancel")
 def cancel_run(run_id: str, services: ServicesDep) -> CancelView:
-    _meta_or_404(services, run_id)
+    load_or_404(services.runs.get, run_id, "run")
     return CancelView(cancelled=services.jobs.cancel(run_id))
