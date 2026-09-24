@@ -28,7 +28,7 @@ async function main() {
   state.selected = initialSelection();
   renderPicker();
   renderColumns();
-  for (const run of state.runs) if (run.status === "running") track(run.id);
+  trackRunning();
   await refreshComparison();
 }
 
@@ -181,19 +181,27 @@ function upsertRun(meta, progress) {
 
 function track(runId) {
   if (state.timers.has(runId)) return;
-  state.timers.set(runId, setInterval(() => poll(runId), POLL_MS));
+  schedulePoll(runId);
+}
+
+function schedulePoll(runId) {
+  state.timers.set(runId, setTimeout(() => poll(runId), POLL_MS));
 }
 
 function stopTracking(runId) {
-  clearInterval(state.timers.get(runId));
+  clearTimeout(state.timers.get(runId));
   state.timers.delete(runId);
 }
 
 async function poll(runId) {
   try {
     const view = await api.run(runId);
+    if (!state.timers.has(runId)) return;
     upsertRun(view.meta, view.progress);
-    if (view.meta.status === "running") return;
+    if (view.meta.status === "running") {
+      schedulePoll(runId);
+      return;
+    }
     stopTracking(runId);
     await refreshComparison();
   } catch (error) {
@@ -201,6 +209,17 @@ async function poll(runId) {
     toastError(error);
   }
 }
+
+function trackRunning() {
+  for (const run of state.runs) if (run.status === "running") track(run.id);
+}
+
+window.addEventListener("pagehide", () => {
+  for (const runId of [...state.timers.keys()]) stopTracking(runId);
+});
+window.addEventListener("pageshow", (event) => {
+  if (event.persisted) trackRunning();
+});
 
 function latestCompletedRuns() {
   const selected = selectedSet();
