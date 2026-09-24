@@ -45,6 +45,8 @@ _PRICED = ModelInfo(id="m", name="m", prompt_price=0.001, completion_price=0.002
             Usage(input_tokens=3, cost=0.003, cost_estimated=True),
             id="bool-cost-ignored",
         ),
+        pytest.param("oops", None, Usage(cost_estimated=True), id="non-mapping-string"),
+        pytest.param([1, 2, 3], None, Usage(cost_estimated=True), id="non-mapping-list"),
     ],
 )
 def test_usage_from_body(

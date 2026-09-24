@@ -58,12 +58,13 @@ def _question_payload(question: AnyQuestion) -> JsonObject:
 
 
 def parse_decisions(
-    answers: Mapping[str, Any], questions: QuestionSet
+    answers: object, questions: QuestionSet
 ) -> tuple[dict[str, Distribution], list[str]]:
     parsed: dict[str, Distribution] = {}
     notes: list[str] = []
+    answers_dict = answers if isinstance(answers, Mapping) else {}
     for question in questions.questions:
-        answer = answers.get(question.id)
+        answer = answers_dict.get(question.id)
         if not isinstance(answer, dict) or answer.get("type") != question.type:
             notes.append(f"{question.id}: missing or mistyped answer")
             continue
@@ -163,7 +164,7 @@ class JevClassifier:
         (email,) = emails
         body = {"model": self._model, "state": email.to_state(), "questions": self._payload}
         response = await self._client.post_json(DECISIONS_PATH, body, api_key=self._api_key)
-        answers, notes = parse_decisions(response.body.get("answers") or {}, self._questions)
+        answers, notes = parse_decisions(response.body.get("answers"), self._questions)
         return RequestResult(
             outcomes={email.id: outcome_from_parsed(answers, notes)},
             usage=usage_from_body(response.body.get("usage"), self._info),

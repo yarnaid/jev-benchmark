@@ -156,6 +156,23 @@ def test_parse_decisions_missing_question(questions: QuestionSet) -> None:
     ]
 
 
+@pytest.mark.parametrize(
+    ("answers_value", "expected_notes_count"),
+    [
+        pytest.param("oops", 3, id="non-mapping-string"),
+        pytest.param([1, 2, 3], 3, id="non-mapping-list"),
+        pytest.param(5, 3, id="non-mapping-int"),
+    ],
+)
+def test_parse_decisions_non_mapping_answers(
+    questions: QuestionSet, answers_value: Any, expected_notes_count: int
+) -> None:
+    parsed, notes = parse_decisions(answers_value, questions)
+    assert parsed == {}
+    assert len(notes) == expected_notes_count
+    assert all("missing or mistyped answer" in note for note in notes)
+
+
 def _classifier(
     client: Any, questions: QuestionSet, info: ModelInfo | None = None
 ) -> JevClassifier:
@@ -233,3 +250,25 @@ async def test_classifier_shape(make_client: ClientFactory, questions: QuestionS
     assert classifier.input_tokens(email) == estimate_tokens(state_json, 3.0)
     assert prepared.pending == (email,)
     assert prepared.resolved == {}
+
+
+async def test_classify_with_malformed_answers_and_usage(
+    make_client: ClientFactory, questions: QuestionSet
+) -> None:
+    client = make_client(
+        lambda request: httpx2.Response(
+            200,
+            json={
+                "model": "m",
+                "answers": "oops",
+                "usage": "bad",
+            },
+        )
+    )
+    email = EmailFactory()
+    result = await _classifier(client, questions).classify([email])
+    outcome = result.outcomes[email.id]
+    assert outcome.answers is None
+    assert outcome.error is not None
+    assert "missing or mistyped" in outcome.error
+    assert result.usage.cost_estimated is True

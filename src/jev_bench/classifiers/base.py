@@ -90,8 +90,8 @@ class Classifier(Protocol):
     ) -> RequestResult: ...
 
 
-def usage_from_body(usage: Mapping[str, Any] | None, pricing: ModelInfo | None) -> Usage:
-    raw = usage or {}
+def usage_from_body(usage: object, pricing: ModelInfo | None) -> Usage:
+    raw = usage if isinstance(usage, Mapping) else {}
     input_tokens = _count(raw, "input_tokens", "prompt_tokens")
     output_tokens = _count(raw, "output_tokens", "completion_tokens")
     cost = raw.get("cost")
