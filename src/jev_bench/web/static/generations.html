@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light dark">
-  <title>Benchmark · jev-bench</title>
+  <title>Generations · jev-bench</title>
   <link rel="icon" href="data:,">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -15,15 +15,14 @@
 </head>
 <body>
   <main class="container-fluid pb-5">
-    <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
-      <h1 class="h4 mb-0 me-auto">Benchmark</h1>
-      <div id="generation-picker"></div>
+    <h1 class="h4 mb-3">Generations</h1>
+    <div class="card shadow-sm mb-4">
+      <div class="card-header fw-semibold">New generation</div>
+      <div class="card-body" id="new-generation"></div>
     </div>
-    <div class="row g-3 mb-4" id="columns"></div>
-    <section id="comparison" aria-live="polite"></section>
+    <div id="generation-list" aria-live="polite"></div>
   </main>
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js" integrity="sha384-FKyoEForCGlyvwx9Hj09JcYn3nv7wiPVlz7YYwJrWVcXK/BmnVDxM+D2scQbITxI" crossorigin="anonymous"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1/dist/chart.umd.min.js" integrity="sha384-jb8JQMbMoBUzgWatfe6COACi2ljcDdZQ2OxczGA3bGNeWe+6DChMTBJemed7ZnvJ" crossorigin="anonymous"></script>
-  <script type="module" src="/js/benchmark.js"></script>
+  <script type="module" src="/js/generations.js"></script>
 </body>
 </html>

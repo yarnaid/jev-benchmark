@@ -13,7 +13,15 @@ from jev_bench.web.app import STATIC_DIR
 FORBIDDEN_SINKS = re.compile(r"\binnerHTML\b|\bouterHTML\b|insertAdjacentHTML|document\.write")
 IMPORT = re.compile(r"""from\s+["'](\./[^"']+)["']""")
 SHELL_MODULES = ("dom.js", "format.js", "storage.js", "key.js", "api.js", "layout.js", "widgets.js")
-PAGE_MODULES = ("benchmark.js", "report.js", "charts.js")
+PAGE_MODULES = (
+    "benchmark.js",
+    "report.js",
+    "charts.js",
+    "generations.js",
+    "explorer.js",
+    "runs.js",
+    "distribution.js",
+)
 
 
 class TagCollector(HTMLParser):
