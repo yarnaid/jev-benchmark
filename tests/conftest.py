@@ -21,16 +21,15 @@ from typing import TYPE_CHECKING
 
 import httpx2
 import pytest
-from fastapi.testclient import TestClient
 from loguru import logger
 from tests.factories import AppFactory, ClientFactory, ServicesFactory, mini_settings
 
 from jev_bench.openrouter import OpenRouterClient
 from jev_bench.questions import ChoiceQuestion, NoulQuestion, QuestionSet, ScoreQuestion
 from jev_bench.services import Services
-from jev_bench.web.app import create_app
 
 if TYPE_CHECKING:
+    from fastapi.testclient import TestClient
     from loguru import Message
 
 _SLOW_LIST = Path(__file__).with_name("slow_tests.txt")
@@ -129,6 +128,10 @@ async def make_services(
 
 @pytest.fixture
 def make_app(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[AppFactory]:
+    from fastapi.testclient import TestClient
+
+    from jev_bench.web.app import create_app
+
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
     clients: list[TestClient] = []
 

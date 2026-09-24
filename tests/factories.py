@@ -27,20 +27,22 @@ import time
 from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 import httpx2
 from factory.base import Factory
 from factory.declarations import LazyFunction, SubFactory
 from factory.declarations import Sequence as FactorySequence
-from fastapi import FastAPI
-from fastapi.testclient import TestClient
 
 from jev_bench.emails import Email, Party
 from jev_bench.openrouter import OpenRouterClient
 from jev_bench.services import Services
 from jev_bench.settings import Settings
 from jev_bench.store.generations import GenerationMeta
+
+if TYPE_CHECKING:
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
 
 
 class PartyFactory(Factory[Party]):
@@ -110,7 +112,7 @@ type AppFactory = Callable[..., TestClient]
 
 
 def services_of(client: TestClient) -> Services:
-    return cast(FastAPI, client.app).state.services
+    return cast("FastAPI", client.app).state.services
 
 
 MINI_QUESTIONS_TOML = """
