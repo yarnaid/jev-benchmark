@@ -71,6 +71,23 @@ def test_append_after_torn_line_starts_a_new_line(tmp_path: Path) -> None:
     assert read_jsonl(path) == [{"a": 1}, {"a": 2}]
 
 
+@pytest.mark.parametrize(
+    "record",
+    [
+        pytest.param({"key": "\u0085"}, id="nel-u0085"),
+        pytest.param({"key": " "}, id="line-sep-u2028"),  # noqa: RUF001
+        pytest.param({"key": " "}, id="para-sep-u2029"),  # noqa: RUF001
+        pytest.param({"key": "\x0c"}, id="form-feed-x0c"),
+    ],
+)
+def test_round_trip_keeps_unicode_line_separators(
+    tmp_path: Path, record: dict[str, object]
+) -> None:
+    path = tmp_path / "items.jsonl"
+    append_jsonl(path, [record])
+    assert read_jsonl(path) == [record]
+
+
 _JSON_VALUES = st.recursive(
     st.none() | st.booleans() | st.integers() | st.text(),
     lambda children: (

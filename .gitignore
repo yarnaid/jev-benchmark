@@ -9,3 +9,4 @@ htmlcov/
 data/embeddings/
 *.tmp
 .DS_Store
+.hypothesis/

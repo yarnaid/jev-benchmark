@@ -53,7 +53,7 @@ def read_jsonl(path: Path) -> list[Any]:
     if not path.exists():
         return []
     raw_text = path.read_text(encoding="utf-8", errors="replace")
-    lines = [line for line in raw_text.splitlines() if line.strip()]
+    lines = [line.rstrip("\r") for line in raw_text.split("\n") if line.strip()]
     records, skipped = _decode_lines(lines)
     if skipped:
         logger.bind(path=str(path), skipped=skipped).warning("skipped unparseable JSONL lines")
