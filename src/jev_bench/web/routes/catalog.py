@@ -6,8 +6,10 @@ Functions:
     catalog: GET /catalog
 """
 
-from fastapi import APIRouter
-from pydantic import BaseModel
+import tomllib
+
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel, ValidationError
 
 from jev_bench.benchmark_config import BenchmarkConfig, ColumnConfig, ColumnKind
 from jev_bench.catalog import ModelInfo
@@ -40,8 +42,15 @@ class CatalogColumn(BaseModel):
 
 @router.get("/catalog")
 async def catalog(services: ServicesDep) -> list[CatalogColumn]:
-    config = services.benchmark_config()
+    config = _benchmark_config(services)
     return [await _column(services, column, config) for column in config.columns]
+
+
+def _benchmark_config(services: Services) -> BenchmarkConfig:
+    try:
+        return services.benchmark_config()
+    except (ValidationError, tomllib.TOMLDecodeError) as exc:
+        raise HTTPException(status_code=400, detail=f"invalid config: {exc}") from exc
 
 
 async def _column(

@@ -1,5 +1,7 @@
 """Tests for jev_bench.web.routes.catalog."""
 
+from pathlib import Path
+
 import pytest
 from tests.factories import AppFactory, FakeOpenRouter
 
@@ -25,3 +27,11 @@ def test_catalog_outage_keeps_the_default_model(make_app: AppFactory) -> None:
     assert "503" in jev["error"]
     assert [model["id"] for model in jev["models"]] == ["typesafe/jev-1.13"]
     assert jev["models"][0]["name"] == "typesafe/jev-1.13 (default)"
+
+
+def test_catalog_with_invalid_config_returns_400(tmp_path: Path, make_app: AppFactory) -> None:
+    client = make_app(FakeOpenRouter())
+    (tmp_path / "config" / "benchmark.toml").write_text("not [valid", encoding="utf-8")
+    response = client.get("/api/catalog")
+    assert response.status_code == 400
+    assert "invalid config" in response.json()["detail"]

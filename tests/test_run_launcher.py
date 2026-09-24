@@ -1,6 +1,7 @@
 """Tests for jev_bench.run_launcher."""
 
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 import httpx2
@@ -124,6 +125,15 @@ async def test_invalid_requests_raise_launch_errors(
     with pytest.raises(RunLaunchError, match=message):
         await launch_run(_request(**request_fields), api_key, services)
     assert services.runs.list_metas() == []
+
+
+async def test_invalid_benchmark_config_becomes_a_launch_error(
+    tmp_path: Path, make_services: ServicesFactory
+) -> None:
+    services = make_services(FakeOpenRouter())
+    (tmp_path / "config" / "benchmark.toml").write_text("not [valid", encoding="utf-8")
+    with pytest.raises(RunLaunchError, match="invalid config"):
+        await launch_run(_request(), "sk-test", services)
 
 
 async def test_generation_without_emails_is_rejected(make_services: ServicesFactory) -> None:

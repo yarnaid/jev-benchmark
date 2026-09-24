@@ -83,6 +83,14 @@ async def test_run_and_wait(
     await http.aclose()
 
 
+async def test_run_invalid_benchmark_config_is_exit_2(tmp_path: Path) -> None:
+    settings = mini_settings(tmp_path, "sk-test")
+    (settings.config_dir / "benchmark.toml").write_text("not [valid", encoding="utf-8")
+    http = _http(FakeOpenRouter())
+    assert await run_and_wait("jev", ["dummy"], None, None, settings=settings, http=http) == 2
+    await http.aclose()
+
+
 async def test_failed_run_is_exit_1(tmp_path: Path) -> None:
     settings = mini_settings(tmp_path, "sk-test")
 

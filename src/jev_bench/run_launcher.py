@@ -10,12 +10,13 @@ Functions:
 """
 
 import asyncio
-from collections.abc import Sequence
+import tomllib
+from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from loguru import logger
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from jev_bench.benchmark_config import (
     BenchmarkConfig,
@@ -59,13 +60,13 @@ async def launch_run(
 ) -> tuple[RunMeta, asyncio.Task[None]]:
     if not api_key.strip():
         raise RunLaunchError("an OpenRouter API key is required")
-    config = services.benchmark_config()
+    config = _load_config(services.benchmark_config)
     column = _column(config, request.column)
     mode = _mode(column, request.mode)
     model = request.model or column.default_model
     emails = _emails(services, request.generation_ids)
     info = await _model_info(services.catalog, column, model)
-    questions = services.question_set()
+    questions = _load_config(services.question_set)
     classifier = build_classifier(column, model, mode, info, questions, config, services, api_key)
     meta = _new_meta(
         column, model, mode, request.generation_ids, questions, config, classifier, len(emails), now
@@ -77,6 +78,13 @@ async def launch_run(
         lambda progress: execute_run(meta, emails, classifier, services.runs, progress),
     )
     return meta, task
+
+
+def _load_config[T](loader: Callable[[], T]) -> T:
+    try:
+        return loader()
+    except (ValidationError, tomllib.TOMLDecodeError) as exc:
+        raise RunLaunchError(f"invalid config: {exc}") from exc
 
 
 def _column(config: BenchmarkConfig, column_id: str) -> ColumnConfig:
