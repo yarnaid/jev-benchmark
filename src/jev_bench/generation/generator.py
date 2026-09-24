@@ -7,7 +7,8 @@ Classes:
 Functions:
     execute_generation: job body (always finalizes the meta; re-raises only CancelledError).
     mark_interrupted_generations: startup sweep for generations left `running`; recomputes `done`
-        and `trait_mismatches` from the emails on disk, `errors`/`total_cost` stay at the last
+        and `trait_mismatches` from the emails on disk (a trait missing from an email's own
+        `traits` is skipped, never counted as a mismatch), `errors`/`total_cost` stay at the last
         checkpoint.
 """
 
@@ -234,11 +235,15 @@ def mark_interrupted_generations(
 def _recovered_totals(store: GenerationStore, meta: GenerationMeta) -> dict[str, object]:
     emails = store.emails(meta.id)
     traits = resolve_traits(meta.config, meta.question_set)
-    mismatches = sum(
-        count_mismatches(_as_plan_item(email), traits, email.reference_answers) for email in emails
-    )
+    mismatches = sum(_mismatches_for_email(email, traits) for email in emails)
     return {"status": "interrupted", "done": len(emails), "trait_mismatches": mismatches}
 
 
-def _as_plan_item(email: Email) -> PlanItem:
-    return PlanItem.model_construct(index=0, model="", sent_at=email.sent_at, traits=email.traits)
+def _mismatches_for_email(email: Email, traits: Sequence[ResolvedTrait]) -> int:
+    return sum(
+        1
+        for trait in traits
+        if trait.question
+        and trait.name in email.traits
+        and email.reference_answers.get(trait.question) != email.traits[trait.name]
+    )

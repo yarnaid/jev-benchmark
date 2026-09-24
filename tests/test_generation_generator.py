@@ -193,6 +193,7 @@ async def test_fatal_failure_never_logs_the_api_key(
     assert final.status == "failed"
     assert secret not in repr(deps)
     assert not any(secret in record for record in log_records)
+    assert not any("Traceback" in record for record in log_records)
 
 
 async def test_non_provider_job_failure_is_logged_at_error_with_type_prefix(
@@ -334,7 +335,7 @@ def test_mark_interrupted_generations(tmp_path: Path, questions: QuestionSet) ->
     live = orphan.model_copy(update={"id": "20260924-110000-live-abcd"})
     store.save(orphan)
     store.save(live)
-    store.append_email(orphan.id, EmailFactory(id=f"{orphan.id}.0001", traits={"category": "spam"}))
+    store.append_email(orphan.id, EmailFactory(id=f"{orphan.id}.0001"))
     assert mark_interrupted_generations(store, lambda generation_id: generation_id == live.id) == [
         orphan.id
     ]
@@ -346,18 +347,31 @@ def test_mark_interrupted_generations_recomputes_trait_mismatches(
     tmp_path: Path, questions: QuestionSet
 ) -> None:
     store = GenerationStore(tmp_path)
-    meta = _meta(questions, 6)
+    meta = _meta(questions, 7)
     store.save(meta)
-    categories = ["personal", "personal", "work", "work", "spam", "spam"]
+    categories: list[str | None] = [
+        "personal",
+        "personal",
+        "work",
+        "work",
+        "spam",
+        "spam",
+        None,
+    ]
     for index, category in enumerate(categories, start=1):
+        traits = {} if category is None else {"category": "spam"}
         store.append_email(
             meta.id,
             EmailFactory(
                 id=f"{meta.id}.{index:04d}",
-                traits={"category": "spam"},
-                reference_answers={"category": category, "urgency": "now", "needs_reply": "no"},
+                traits=traits,
+                reference_answers={
+                    "category": category or "spam",
+                    "urgency": "now",
+                    "needs_reply": "no",
+                },
             ),
         )
     assert mark_interrupted_generations(store, lambda _: False) == [meta.id]
     final = store.get(meta.id)
-    assert (final.status, final.done, final.trait_mismatches) == ("interrupted", 6, 4)
+    assert (final.status, final.done, final.trait_mismatches) == ("interrupted", 7, 4)

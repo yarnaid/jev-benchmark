@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from pydantic import SecretStr
 from tests.factories import EmailFactory
 
 from jev_bench.benchmark_config import ColumnKind, EmbeddingParams, JevParams
@@ -328,8 +329,9 @@ def test_mark_interrupted_runs(tmp_path: Path, questions: QuestionSet) -> None:
 
 
 class _KeyLeakingClassifier:
-    def __init__(self, api_key: str) -> None:
-        self._api_key = api_key
+    def __init__(self, api_key: str, *, unexpected: bool = False) -> None:
+        self._api_key = SecretStr(api_key)
+        self._unexpected = unexpected
         self.emails_per_request = 1
         self.concurrency = 1
         self.budget = Budget(total=10_000)
@@ -344,17 +346,31 @@ class _KeyLeakingClassifier:
     async def classify(
         self, emails: Sequence[Email], on_progress: ProgressCallback | None = None
     ) -> RequestResult:
-        return await _fatal_request(self._api_key)
+        if self._unexpected:
+            return await _unexpected_request(self._api_key.get_secret_value())
+        return await _fatal_request(self._api_key.get_secret_value())
 
 
 async def _fatal_request(api_key: str) -> RequestResult:
     raise OpenRouterError("HTTP 402: insufficient credits", status=402)
 
 
+async def _unexpected_request(api_key: str) -> RequestResult:
+    raise RuntimeError("Cannot send a request, as the client has been closed.")
+
+
+@pytest.mark.parametrize(
+    "unexpected",
+    [
+        pytest.param(False, id="fatal-openrouter-error"),
+        pytest.param(True, id="unexpected-runtime-error"),
+    ],
+)
 async def test_fatal_failure_never_logs_the_api_key(
-    tmp_path: Path, questions: QuestionSet, log_records: list[Any]
+    tmp_path: Path, questions: QuestionSet, log_records: list[Any], unexpected: bool
 ) -> None:
     secret = "sk-or-v1-RUNNERSECRET-1337"
-    final, _, _ = await _run(tmp_path, questions, _KeyLeakingClassifier(secret), [EmailFactory()])
+    classifier = _KeyLeakingClassifier(secret, unexpected=unexpected)
+    final, _, _ = await _run(tmp_path, questions, classifier, [EmailFactory()])
     assert final.status == "failed"
     assert not any(secret in record for record in log_records)

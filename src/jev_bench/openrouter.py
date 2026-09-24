@@ -243,8 +243,8 @@ def _raise_embedded_error(payload: Mapping[str, Any]) -> None:
 
 
 def chat_content(body: Mapping[str, Any]) -> str:
-    choices = body.get("choices") or []
-    if not choices:
+    choices = body.get("choices")
+    if not isinstance(choices, list) or not choices:
         raise ChatContentError("response has no choices")
     choice = choices[0]
     if not isinstance(choice, Mapping):

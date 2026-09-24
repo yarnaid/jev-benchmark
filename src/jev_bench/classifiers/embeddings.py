@@ -17,6 +17,7 @@ from string import Template
 from typing import Any, Literal
 
 import numpy as np
+from pydantic import SecretStr
 
 from jev_bench.benchmark_config import EmbeddingParams, TokenParams
 from jev_bench.catalog import ModelInfo
@@ -81,7 +82,7 @@ class EmbeddingClassifier:
         cache: EmbeddingCache,
     ) -> None:
         self._client = client
-        self._api_key = api_key
+        self._api_key = SecretStr(api_key)
         self._model = model
         self._info = model_info
         self._questions = questions
@@ -148,7 +149,9 @@ class EmbeddingClassifier:
 
     async def _embed_and_cache(self, items: Sequence[CacheItem]) -> tuple[Usage, ApiResponse]:
         body = {"model": self._model, "input": [text for _, _, text in items]}
-        response = await self._client.post_json(EMBEDDINGS_PATH, body, api_key=self._api_key)
+        response = await self._client.post_json(
+            EMBEDDINGS_PATH, body, api_key=self._api_key.get_secret_value()
+        )
         vectors = _vectors(response.body, len(items))
         usage = usage_from_body(response.body.get("usage"), self._info)
         model = response.body.get("model")

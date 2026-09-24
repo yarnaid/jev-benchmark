@@ -14,6 +14,8 @@ import math
 from collections.abc import Mapping, Sequence
 from typing import Any
 
+from pydantic import SecretStr
+
 from jev_bench.benchmark_config import JevParams, TokenParams
 from jev_bench.catalog import ModelInfo
 from jev_bench.classifiers.base import (
@@ -138,7 +140,7 @@ class JevClassifier:
         tokens: TokenParams,
     ) -> None:
         self._client = client
-        self._api_key = api_key
+        self._api_key = SecretStr(api_key)
         self._model = model
         self._info = model_info
         self._questions = questions
@@ -163,7 +165,9 @@ class JevClassifier:
     ) -> RequestResult:
         (email,) = emails
         body = {"model": self._model, "state": email.to_state(), "questions": self._payload}
-        response = await self._client.post_json(DECISIONS_PATH, body, api_key=self._api_key)
+        response = await self._client.post_json(
+            DECISIONS_PATH, body, api_key=self._api_key.get_secret_value()
+        )
         answers, notes = parse_decisions(response.body.get("answers"), self._questions)
         return RequestResult(
             outcomes={email.id: outcome_from_parsed(answers, notes)},

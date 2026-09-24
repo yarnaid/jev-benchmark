@@ -11,6 +11,8 @@ from collections.abc import Sequence
 from string import Template
 from typing import Any
 
+from pydantic import SecretStr
+
 from jev_bench.benchmark_config import ChatMode, LlmParams, TokenParams
 from jev_bench.catalog import ModelInfo
 from jev_bench.classifiers.base import (
@@ -57,7 +59,7 @@ class LlmClassifier:
         cache_system_prompt: bool,
     ) -> None:
         self._client = client
-        self._api_key = api_key
+        self._api_key = SecretStr(api_key)
         self._model = model
         self._info = model_info
         self._questions = questions
@@ -100,7 +102,9 @@ class LlmClassifier:
         user = json.dumps(email.to_state(), ensure_ascii=False)
         response_format = json_schema_format("email_triage", answers_schema(self._questions))
         body = self._body(user, response_format, [email])
-        response = await self._client.post_json(CHAT_PATH, body, api_key=self._api_key)
+        response = await self._client.post_json(
+            CHAT_PATH, body, api_key=self._api_key.get_secret_value()
+        )
         return self._result(response, {email.id: self._single_outcome(response.body)})
 
     async def _classify_all(
@@ -120,7 +124,7 @@ class LlmClassifier:
         try:
             async with asyncio.timeout(self._params.all_in_one_timeout_s):
                 return await self._client.post_stream(
-                    CHAT_PATH, body, api_key=self._api_key, on_text=on_text
+                    CHAT_PATH, body, api_key=self._api_key.get_secret_value(), on_text=on_text
                 )
         except TimeoutError as exc:
             raise OpenRouterError(
