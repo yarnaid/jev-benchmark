@@ -4,6 +4,8 @@ Constants:
     EMBEDDINGS_PATH
 Classes:
     EmbeddingClassifier: cache-first Classifier (only texts missing from the cache are embedded).
+        `prepare()` holds the cache's lock across the whole option-resolution step, so concurrent
+        classifiers sharing one `EmbeddingCache` never both pay to embed the same option text.
 Functions:
     option_texts: (question id, option id, rendered text) for every option.
     email_text: rendered email text (the cache key's source).
@@ -102,9 +104,10 @@ class EmbeddingClassifier:
         items: list[CacheItem] = [
             ("option", f"{question}:{option}", text) for question, option, text in self._options
         ]
-        cached_cost = sum(entry.cost for entry in self._cached(items))
-        usage = await self._ensure_cached(items)
-        self._matrices = self._option_matrices()
+        async with self._cache.lock:
+            cached_cost = sum(entry.cost for entry in self._cached(items))
+            usage = await self._ensure_cached(items)
+            self._matrices = self._option_matrices()
         resolved, pending = self._split_cached(emails)
         return PrepareResult(
             usage=usage, cached_cost=cached_cost, resolved=resolved, pending=tuple(pending)

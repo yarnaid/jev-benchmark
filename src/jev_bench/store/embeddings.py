@@ -2,13 +2,16 @@
 
 Classes:
     CachedVector: one cached embedding with its original cost share.
-    EmbeddingCache: lazy load, lookup and append for one model (appends are synchronous).
+    EmbeddingCache: lazy load, lookup and append for one model (appends are synchronous);
+        exposes `.lock`, an `asyncio.Lock` callers share to serialize a check-then-fetch-then-put
+        sequence across concurrent users of the same instance.
     EmbeddingCaches: registry handing out one shared cache per model.
 Functions:
     text_key: sha256 hex digest of a text.
     encode_vector, decode_vector: float32 little-endian base64 round-trip.
 """
 
+import asyncio
 import base64
 import hashlib
 from collections.abc import Sequence
@@ -59,6 +62,7 @@ class EmbeddingCache:
     def __init__(self, path: Path) -> None:
         self._path = path
         self._entries: dict[str, CachedVector] | None = None
+        self.lock: asyncio.Lock = asyncio.Lock()
 
     @property
     def path(self) -> Path:

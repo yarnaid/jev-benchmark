@@ -44,12 +44,21 @@ _INFO = ModelInfo(id="openai/text-embedding-3-large", name="E", context_length=8
 
 
 class EmbeddingServer:
-    def __init__(self, vectors: dict[str, list[float]] = _VECTORS, drop_one: bool = False) -> None:
+    def __init__(
+        self,
+        vectors: dict[str, list[float]] = _VECTORS,
+        drop_one: bool = False,
+        omit_embedding: bool = False,
+        bad_embedding: bool = False,
+    ) -> None:
         self.vectors = vectors
         self.drop_one = drop_one
+        self.omit_embedding = omit_embedding
+        self.bad_embedding = bad_embedding
         self.inputs: list[list[str]] = []
 
-    def __call__(self, request: httpx2.Request) -> httpx2.Response:
+    async def __call__(self, request: httpx2.Request) -> httpx2.Response:
+        await asyncio.sleep(0)
         texts = json.loads(request.content)["input"]
         self.inputs.append(texts)
         data = [
@@ -58,6 +67,10 @@ class EmbeddingServer:
         ]
         if self.drop_one:
             data = data[1:]
+        if self.omit_embedding:
+            del data[0]["embedding"]
+        if self.bad_embedding:
+            data[0]["embedding"] = "not-a-vector"
         usage = {
             "prompt_tokens": 2 * len(texts),
             "total_tokens": 2 * len(texts),
@@ -187,13 +200,31 @@ async def test_degenerate_email_vectors(
     assert error in outcome.error
 
 
-async def test_embedding_count_mismatch_is_an_openrouter_error(
-    make_client: ClientFactory, questions: QuestionSet, tmp_path: Path
+@pytest.mark.parametrize(
+    ("server", "match"),
+    [
+        pytest.param(EmbeddingServer(drop_one=True), "expected 2 embeddings", id="count-mismatch"),
+        pytest.param(
+            EmbeddingServer(omit_embedding=True),
+            "malformed embeddings response",
+            id="missing-embedding-key",
+        ),
+        pytest.param(
+            EmbeddingServer(bad_embedding=True),
+            "malformed embeddings response",
+            id="non-numeric-embedding",
+        ),
+    ],
+)
+async def test_malformed_embedding_response_is_an_openrouter_error(
+    make_client: ClientFactory,
+    questions: QuestionSet,
+    tmp_path: Path,
+    server: EmbeddingServer,
+    match: str,
 ) -> None:
-    classifier = _classifier(
-        make_client(EmbeddingServer(drop_one=True)), questions, EmbeddingCache(tmp_path / "v.jsonl")
-    )
-    with pytest.raises(OpenRouterError, match="expected 2 embeddings"):
+    classifier = _classifier(make_client(server), questions, EmbeddingCache(tmp_path / "v.jsonl"))
+    with pytest.raises(OpenRouterError, match=match):
         await classifier.prepare([])
 
 
@@ -201,10 +232,19 @@ async def test_concurrent_classifiers_share_one_cache(
     make_client: ClientFactory, questions: QuestionSet, tmp_path: Path
 ) -> None:
     cache = EmbeddingCache(tmp_path / "v.jsonl")
-    first = _classifier(make_client(EmbeddingServer()), questions, cache)
-    second = _classifier(make_client(EmbeddingServer()), questions, cache)
+    first_server, second_server = EmbeddingServer(), EmbeddingServer()
+    first = _classifier(make_client(first_server), questions, cache)
+    second = _classifier(make_client(second_server), questions, cache)
     junk, friend = _email("junk mail"), _email("hi friend")
     await asyncio.gather(first.prepare([junk]), second.prepare([friend]))
+    expected_options = [text for _, _, text in option_texts(questions, _PARAMS.option_template)]
+    requested_options = [
+        text
+        for server in (first_server, second_server)
+        for batch in server.inputs
+        for text in batch
+    ]
+    assert sorted(requested_options) == sorted(expected_options)
     results = await asyncio.gather(first.classify([junk]), second.classify([friend]))
     assert all(
         outcome.answers is not None for result in results for outcome in result.outcomes.values()
