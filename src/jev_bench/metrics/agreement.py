@@ -73,7 +73,7 @@ def _fleiss_from_counts(counts: FloatArray, n_raters: int) -> float | None:
 
 
 def pearson_r(x: FloatArray, y: FloatArray) -> float | None:
-    if x.size < 2 or np.std(x) == 0 or np.std(y) == 0:
+    if x.size < 2 or np.ptp(x) == 0 or np.ptp(y) == 0:
         return None
     return float(np.corrcoef(x, y)[0, 1])
 

@@ -120,6 +120,13 @@ def test_fleiss_kappa(labels: np.ndarray, k: int, expected: float | None) -> Non
         pytest.param([1.0, 2.0, 3.0], [3.0, 2.0, 1.0], -1.0, id="anti"),
         pytest.param([1.0, 1.0, 1.0], [1.0, 2.0, 3.0], None, id="constant"),
         pytest.param([1.0], [2.0], None, id="single"),
+        pytest.param([0.2] * 6, [0.2] * 6, None, id="near-constant-float-noise-vs-self"),
+        pytest.param(
+            [0.2] * 6,
+            [0.1, 0.9, 0.4, 0.6, 0.2, 0.8],
+            None,
+            id="near-constant-float-noise-vs-varied",
+        ),
     ],
 )
 def test_pearson_r(x: list[float], y: list[float], expected: float | None) -> None:
