@@ -35,17 +35,20 @@ class FakeClassifier:
         *,
         emails_per_request: int | None = 1,
         budget: Budget | None = None,
-        fail: dict[str, OpenRouterError] | None = None,
+        concurrency: int = 4,
+        fail: dict[str, Exception] | None = None,
         resolved: dict[str, EmailOutcome] | None = None,
         sizes: dict[str, int] | None = None,
         gate: asyncio.Event | None = None,
         prepare_error: Exception | None = None,
     ) -> None:
         self.emails_per_request = emails_per_request
-        self.concurrency = 4
+        self.concurrency = concurrency
         self.budget = budget if budget is not None else Budget(total=10_000)
         self.sizing = Sizing()
         self.calls: list[list[str]] = []
+        self.max_in_flight = 0
+        self._in_flight = 0
         self._fail = fail or {}
         self._resolved = resolved or {}
         self._sizes = sizes or {}
@@ -67,22 +70,29 @@ class FakeClassifier:
         self, emails: Sequence[Email], on_progress: ProgressCallback | None = None
     ) -> RequestResult:
         self.calls.append([email.id for email in emails])
+        latency_ms = 10.0 * len(self.calls)
         if on_progress is not None:
             on_progress(len(emails))
-        if self._gate is not None:
-            await self._gate.wait()
-        for email in emails:
-            if email.id in self._fail:
-                raise self._fail[email.id]
-        outcomes = {email.id: EmailOutcome(answers=_ANSWER) for email in emails}
-        usage = Usage(input_tokens=10 * len(emails), output_tokens=4, cost=0.001 * len(emails))
-        return RequestResult(
-            outcomes=outcomes,
-            usage=usage,
-            latency_ms=10.0 * len(self.calls),
-            resolved_model="test/resolved",
-            raw={"ok": True},
-        )
+        self._in_flight += 1
+        self.max_in_flight = max(self.max_in_flight, self._in_flight)
+        try:
+            await asyncio.sleep(0)
+            if self._gate is not None:
+                await self._gate.wait()
+            for email in emails:
+                if email.id in self._fail:
+                    raise self._fail[email.id]
+            outcomes = {email.id: EmailOutcome(answers=_ANSWER) for email in emails}
+            usage = Usage(input_tokens=10 * len(emails), output_tokens=4, cost=0.001 * len(emails))
+            return RequestResult(
+                outcomes=outcomes,
+                usage=usage,
+                latency_ms=latency_ms,
+                resolved_model="test/resolved",
+                raw={"ok": True},
+            )
+        finally:
+            self._in_flight -= 1
 
 
 def _meta(questions: QuestionSet, kind: ColumnKind = "decisions", n_emails: int = 3) -> RunMeta:
@@ -138,6 +148,15 @@ async def test_per_email_run_completes_and_summarizes(
     assert (progress.done, progress.streaming) == (3, {})
 
 
+async def test_concurrency_is_bounded_by_the_semaphore(
+    tmp_path: Path, questions: QuestionSet
+) -> None:
+    emails: list[Email] = [EmailFactory() for _ in range(5)]
+    classifier = FakeClassifier(concurrency=2)
+    await _run(tmp_path, questions, classifier, emails)
+    assert classifier.max_in_flight == 2
+
+
 async def test_all_in_one_is_split_by_the_budget_and_costs_are_shared(
     tmp_path: Path, questions: QuestionSet
 ) -> None:
@@ -178,12 +197,18 @@ async def test_non_fatal_error_is_recorded_per_email(
             id="prepare-error",
         ),
         pytest.param(None, RuntimeError("bug"), "bug", id="unexpected-exception"),
+        pytest.param(
+            KeyError("needs_reply"),
+            None,
+            "KeyError: 'needs_reply'",
+            id="bug-inside-task-group",
+        ),
     ],
 )
 async def test_failures_finalize_as_failed(
     tmp_path: Path,
     questions: QuestionSet,
-    fatal: OpenRouterError | None,
+    fatal: Exception | None,
     prepare_error: Exception | None,
     message: str,
 ) -> None:
@@ -220,6 +245,20 @@ async def test_oversize_email_is_never_sent(tmp_path: Path, questions: QuestionS
     assert errors == {emails[0].id: None, emails[1].id: OVERSIZE_ERROR}
 
 
+async def test_earlier_requests_are_persisted_before_a_fatal_failure(
+    tmp_path: Path, questions: QuestionSet
+) -> None:
+    emails: list[Email] = [EmailFactory() for _ in range(3)]
+    classifier = FakeClassifier(
+        concurrency=1,
+        fail={emails[2].id: OpenRouterError("HTTP 402: no credit", status=402)},
+    )
+    final, _, store = await _run(tmp_path, questions, classifier, emails)
+    assert final.status == "failed"
+    assert {p.email_id for p in store.predictions(final.id)} == {emails[0].id, emails[1].id}
+    assert [r.request_index for r in store.responses(final.id)] == [0, 1]
+
+
 @pytest.mark.parametrize(
     ("stop", "expected"),
     [
@@ -247,7 +286,10 @@ async def test_cancellation_is_persisted(
         await registry.shutdown(timeout_s=0.05)
     with contextlib.suppress(asyncio.CancelledError):
         await task
-    assert store.get(meta.id).status == expected
+    final = store.get(meta.id)
+    assert final.status == expected
+    assert final.finished_at is not None
+    assert final.duration_s is not None
 
 
 def test_summarize_percentiles_use_distinct_requests(questions: QuestionSet) -> None:
@@ -276,6 +318,8 @@ def test_mark_interrupted_runs(tmp_path: Path, questions: QuestionSet) -> None:
     )
     marked = mark_interrupted_runs(store, lambda run_id: run_id == live.id)
     assert marked == [orphan.id]
-    assert (store.get(orphan.id).status, store.get(orphan.id).n_done) == ("interrupted", 1)
+    interrupted = store.get(orphan.id)
+    assert (interrupted.status, interrupted.n_done) == ("interrupted", 1)
+    assert interrupted.total_cost == pytest.approx(0.1)
     assert store.get(live.id).status == "running"
     assert store.get(done.id).status == "completed"

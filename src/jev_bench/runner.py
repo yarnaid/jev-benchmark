@@ -47,10 +47,20 @@ async def execute_run(
         _finish(store, meta.id, cancel_status(exc), None, started)
         raise
     except Exception as exc:
-        logger.bind(run=meta.id).opt(exception=exc).warning("run failed")
-        _finish(store, meta.id, "failed", describe_error(exc), started)
+        logger.bind(run=meta.id).opt(exception=exc).error("run failed")
+        _finish(store, meta.id, "failed", _run_error(exc), started)
         return
     _finish(store, meta.id, "completed", None, started)
+
+
+def _run_error(exc: BaseException) -> str:
+    leaf = exc
+    while isinstance(leaf, BaseExceptionGroup) and leaf.exceptions:
+        leaf = leaf.exceptions[0]
+    message = describe_error(exc)
+    if isinstance(leaf, OpenRouterError):
+        return message
+    return f"{type(leaf).__name__}: {message}"
 
 
 async def _execute(
@@ -122,12 +132,12 @@ async def _request(
     progress: JobProgress,
 ) -> None:
     async with semaphore:
-        result = await _classify(index, batch, classifier, progress)
+        result = await _classify(index, batch, classifier, run_id, progress)
     _record_request(store, run_id, index, batch, result, progress)
 
 
 async def _classify(
-    index: int, batch: list[Email], classifier: Classifier, progress: JobProgress
+    index: int, batch: list[Email], classifier: Classifier, run_id: str, progress: JobProgress
 ) -> RequestResult:
     def on_progress(count: int) -> None:
         progress.streaming[index] = count
@@ -137,6 +147,7 @@ async def _classify(
     except OpenRouterError as exc:
         if exc.fatal:
             raise
+        logger.bind(run=run_id, request=index).warning("request failed: {}", exc)
         return failed_result(batch, str(exc))
     finally:
         progress.streaming.pop(index, None)
