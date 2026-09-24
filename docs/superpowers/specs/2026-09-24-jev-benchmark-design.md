@@ -5,37 +5,46 @@
 
 ## 1. Purpose
 
-Benchmark **Jev** (`typesafe/jev-1.13`, TypeSafe's decision model on OpenRouter) against frontier chat
-models (one Anthropic, one OpenAI) on email triage. Every model gets the same emails and the same typed
-questions and returns a probability for every answer option. There is no ground truth: the benchmark
-measures **speed, cost and how closely the models agree** with each other, with the generator's reference
-answers and, when present, with optional human labels.
+Benchmark **Jev** (`typesafe/jev-1.13`, TypeSafe's decision model on OpenRouter) on email triage against
+three alternatives: a frontier Anthropic chat model, a frontier OpenAI chat model, and a zero-shot
+**embedding-similarity** baseline. Every column gets the same emails and the same typed questions and
+returns a probability for every answer option. There is no ground truth: the benchmark measures **speed,
+cost and how closely the columns agree** with each other, with the generator's reference answers and, when
+present, with optional human labels.
 
 ### Success criteria
 
 1. `jev-bench generate` (CLI) and the Generations page (UI) each produce a separate, persisted generation of
    synthetic emails with reference answers.
-2. The Benchmark page runs any subset of generations through each of three columns (Jev / Anthropic /
-   OpenAI). Each column's model is picked from a list filled live from the OpenRouter catalog. The page
-   shows live progress, wall-clock duration and total USD cost.
+2. The Benchmark page runs any subset of generations through four columns (Jev / Anthropic / OpenAI /
+   Embeddings).
+   - Each column's model is picked from a list filled live from the OpenRouter catalog.
+   - The chat columns offer two modes: **per email** (one prompt per email) and **all in one** (every
+     selected email in a single prompt).
+   - The page shows live progress, wall-clock duration and total USD cost.
 3. Every run is persisted and can be reopened and compared with any other run later.
-4. Comparison shows per-model answer distributions (e.g. "how many emails each model called `spam`"),
+4. Comparison shows per-column answer distributions (e.g. "how many emails each model called `spam`"),
    pairwise agreement metrics with confidence intervals, and group agreement.
-5. The Explorer shows every email with the reference answers and each model's distributions side by side,
-   and allows manual labelling.
+5. The Explorer shows every email with the reference answers and each run's distributions side by side, and
+   allows manual labelling.
 6. Everything works with **zero human labels**: human-based metrics appear only once labels exist.
 7. Correct with no network: the test suite mocks every OpenRouter call; coverage ≥ 95 %.
 
 ### Non-goals (foundation)
 
 Auth / multi-user; resuming interrupted runs; deleting runs or generations from the UI; editing TOML config
-from the UI; logprob-based probabilities; Jev's System One API.
+from the UI; logprob-based probabilities; Jev's System One API; the OpenRouter Batch API (explicitly
+excluded).
 
 ## 2. External contracts (verified 2026-09-24)
 
+All calls go to OpenRouter with `Authorization: Bearer $OPENROUTER_API_KEY`. Every response carries
+`usage.cost` in USD. If it is ever missing, cost is estimated as tokens × catalog pricing and the prediction
+is flagged `cost_estimated`.
+
 ### Jev: Decisions API
 
-`POST https://openrouter.ai/api/alpha/decisions`, `Authorization: Bearer $OPENROUTER_API_KEY`.
+`POST https://openrouter.ai/api/alpha/decisions`
 
 ```json
 {
@@ -56,22 +65,30 @@ The response contains `answers.<qid>`, which takes one of three shapes:
 - `{"type": "score", "score": s, "confidence": c, "legend": {"0": "..."}, "probabilities": {"0": p}}`
 
 It also contains `usage: {input_tokens, output_tokens, cost}` and a resolved `model` id. For `choice` and
-`score`, `probabilities` is documented as optional. Any number of questions fit in one call. The context
-limit is 32k tokens. The model list comes from `GET /api/v1/models?output_modalities=decisions`
-(`typesafe/jev-1.13`, `~typesafe/jev-latest`).
+`score`, `probabilities` is documented as optional. Any number of questions fit in one call, but only one
+`state` (one email) per call. The context limit is 32k tokens.
 
 ### Chat models: Chat Completions
 
 `POST https://openrouter.ai/api/v1/chat/completions`. The request uses
 `response_format: {type: "json_schema", json_schema: {name, strict: true, schema}}`, `temperature: 0`,
-`reasoning: {enabled: false}` and `provider: {require_parameters: true}`. `usage.cost` (USD) and the token
-counts arrive in every response. Neither Claude nor GPT-5.x exposes `logprobs` on OpenRouter, so LLM
-probabilities are **verbalized**: the model writes them as numbers in JSON (see §9, caveats).
+`reasoning: {enabled: false}` and `provider: {require_parameters: true}`. Neither Claude nor GPT-5.x
+exposes `logprobs` on OpenRouter, so LLM probabilities are **verbalized**: the model writes them as numbers
+in JSON (see §9, caveats). *All in one* requests are streamed (`stream: true`, SSE) to survive long
+generations and to report progress. The final chunk carries `usage`. The default models allow at most
+128k output tokens (`top_provider.max_completion_tokens`).
+
+### Embeddings
+
+`POST https://openrouter.ai/api/v1/embeddings` with `{model, input: [str, ...]}` returns
+`{data: [{index, embedding}], model, usage}`. One request embeds many texts.
 
 ### Catalog
 
-`GET https://openrouter.ai/api/v1/models` is public and needs no key. Per model it returns `id`, `name`,
-`pricing.prompt` and `pricing.completion` (USD per token), `context_length` and `supported_parameters`.
+`GET https://openrouter.ai/api/v1/models` (text models) and `?output_modalities=decisions` or
+`?output_modalities=embeddings` are public and need no key. Per model they return `id`, `name`,
+`pricing.prompt` and `pricing.completion` (USD per token), `context_length`,
+`top_provider.max_completion_tokens` and `supported_parameters`.
 
 ## 3. Configuration: structured TOML in `config/`
 
@@ -80,9 +97,13 @@ it used, so later edits never change the meaning of old results.
 
 ### `config/questions.toml`: the single source of truth for questions
 
-Types mirror Jev primitives. Option ids are snake_case and every option carries a description. For
-`score`, the document order of `options` is the scale order, lowest first. `noul` options are exactly
-`yes` and `no`. `instructions` must be self-contained, because Jev never sees question ids.
+Types mirror Jev primitives. Option ids are snake_case.
+
+- **Every option has a non-empty description,** including the `yes` and `no` of `noul` questions. The
+  embedding column embeds these descriptions.
+- For `score`, the document order of `options` is the scale order, lowest first.
+- `noul` options are exactly `yes` and `no`.
+- `instructions` must be self-contained, because Jev never sees question ids.
 
 | id | type | question (gist) |
 |---|---|---|
@@ -119,14 +140,29 @@ Types mirror Jev primitives. Option ids are snake_case and every option carries 
 
 ### `config/benchmark.toml`
 
-- `[llm]`: `system_prompt` template (`$questions`), `temperature = 0`, `reasoning = {enabled = false}`,
-  `cache_system_prompt = true` (adds an Anthropic `cache_control` breakpoint on the system prompt; OpenAI
-  caches automatically), `concurrency = 8`.
-- `[[columns]]`: `id`, `title`, `kind` (`decisions` | `chat`), a catalog filter (`modality = "decisions"`
-  or `prefix = "anthropic/"`) and `default_model`. The defaults are:
+- `[jev]`: `concurrency = 8`.
+- `[llm]`, shared by both chat columns:
+  - `system_prompt` (per-email mode) and `system_prompt_all_in_one`: templates using `$questions`;
+  - `temperature = 0`, `reasoning = {enabled = false}`;
+  - `cache_system_prompt = true`: adds an Anthropic `cache_control` breakpoint on the system prompt;
+    OpenAI caches automatically;
+  - `concurrency = 8` (per-email mode);
+  - `all_in_one_timeout_s = 1800`;
+  - `est_output_tokens_per_email = 400`: used for the UI warning when an all-in-one run would exceed the
+    model's `max_completion_tokens`.
+- `[embeddings]`:
+  - `email_template` (default `"From: $from\nTo: $to\nCc: $cc\nSubject: $subject\n\n$body"`);
+  - `option_template` (default `"$instructions $description"`);
+  - `temperature = 0.05` (softmax τ);
+  - `emails_per_request = 32`, `concurrency = 4`.
+- `[[columns]]`: `id`, `title`, `kind` (`decisions` | `chat` | `embeddings`), a catalog filter
+  (`modality = "decisions"`, `modality = "embeddings"` or `prefix = "anthropic/"`) and
+  `default_model`. The defaults are:
   - `jev` → `typesafe/jev-1.13`
   - `anthropic` → `anthropic/claude-sonnet-5`
   - `openai` → `openai/gpt-5.6-terra`
+  - `embeddings` → `openai/text-embedding-3-large` (strong alternative in the catalog:
+    `qwen/qwen3-embedding-8b`, 13× cheaper)
 
 ### Environment (`.env`, via pydantic-settings)
 
@@ -141,7 +177,8 @@ data/
   generations/<gen_id>/generation.json   # GenerationMeta
   generations/<gen_id>/emails.jsonl      # one Email per line, appended as generated
   runs/<run_id>/run.json                 # RunMeta
-  runs/<run_id>/predictions.jsonl        # one Prediction per email, appended as answered
+  runs/<run_id>/predictions.jsonl        # one Prediction per email
+  runs/<run_id>/responses.jsonl          # one line per HTTP request: email_ids, status, latency, body
   labels/<gen_id>.json                   # {email_id: {question_id: option_id}}, human labels
 ```
 
@@ -152,16 +189,27 @@ data/
   address}`, `to [{name, address}]`, `cc [...]`, `subject`, `body`, `generator_model`, `traits {name:
   value}`, `reference_answers {question_id: option_id}`.
 - **What a benchmarked model sees:** only `{from, to, cc, subject, body}`, built by a single function
-  `Email.to_state()`. `sent_at`, `traits`, `reference_answers` and `generator_model` are never sent.
+  `Email.to_state()`. `sent_at`, `traits`, `reference_answers`, `generator_model` and the email `id` are
+  never sent. Ids contain generation name slugs that could leak hints, so the all-in-one mode addresses
+  emails by positional refs (`e001…`).
 - **GenerationMeta:** `id`, `name`, `created_at`, `status`, `requested`, `done`, `errors`, `seed`, snapshots
   of the question set and generation config, `total_cost`, `duration_s`, `trait_mismatches` (how often the
   generator's own answer differs from a question-linked trait it was asked for).
-- **RunMeta:** `id`, `column`, `kind`, `model` (requested), `resolved_models` (as returned by OpenRouter;
-  matters for `~…-latest` aliases), `generation_ids`, snapshots of the question set and LLM params,
-  `concurrency`, `status`, `created_at`, `finished_at`, `duration_s` (wall clock), `n_emails`, `n_done`,
-  `n_errors`, `total_cost`, `input_tokens`, `output_tokens`, `latency_p50_ms`, `latency_p95_ms`.
-- **Prediction:** `email_id`, `answers {question_id: {option_id: p}} | null`, `error | null`,
-  `latency_ms`, `cost`, `input_tokens`, `output_tokens`, `resolved_model`, `raw` (the full response body).
+- **RunMeta:**
+  - identity: `id`, `column`, `kind`, `model` (requested), `resolved_models` (as returned by OpenRouter;
+    matters for `~…-latest` aliases), `generation_ids`;
+  - request shape: `mode` (`per_email` | `all_in_one` for chat, `per_email` for Jev, `batched` for
+    embeddings), `emails_per_request`, snapshots of the question set and column params, `concurrency`;
+  - lifecycle: `status`, `created_at`, `finished_at`, `duration_s` (wall clock);
+  - totals: `n_emails`, `n_done`, `n_errors`, `n_requests`, `total_cost` (including `setup_cost`),
+    `setup_cost` (embedding the option texts), `input_tokens`, `output_tokens`, `latency_p50_ms` and
+    `latency_p95_ms` (over requests).
+- **Prediction:** `email_id`, `answers {question_id: {option_id: p}} | null`, `error | null`, `notes`,
+  `request_index`, `batch_size`, `latency_ms` (of its request), `cost`, `input_tokens` and
+  `output_tokens`, `resolved_model`, `similarities {question_id: {option_id: cosine}} | null` (embeddings
+  only). When `batch_size > 1`, cost and tokens are the request's totals split evenly across its emails.
+- **responses.jsonl** stores each raw response once per request instead of once per email. Embedding vectors
+  are stripped before storing; vectors are never persisted.
 - **Status lifecycle** (runs and generations): `running` → `completed` | `cancelled` | `failed`. On server
   start, any `running` without a live task becomes `interrupted`, and its totals are recomputed from the
   JSONL. The output is the local filesystem itself, so these markers are authoritative.
@@ -178,10 +226,20 @@ option ids, with p ∈ [0, 1] and Σ = 1:
 | source | noul | choice | score |
 |---|---|---|---|
 | Jev | `{yes: noul, no: 1 − noul}` | `probabilities`; missing → one-hot on `choice` | `probabilities` indexed `"0"…` mapped to level ids in order; missing → one-hot at `round(score)` |
-| LLM | schema field is P(yes) → `{yes: p, no: 1 − p}` | object with one number per option → clip < 0 to 0, renormalize; Σ = 0 → per-question parse error | same as choice |
+| LLM (both modes) | schema field is P(yes) → `{yes: p, no: 1 − p}` | object with one number per option → clip < 0 to 0, renormalize; Σ = 0 → per-question parse error | same as choice |
+| Embeddings | `softmax(cos / τ)` over `yes`, `no` | `softmax(cos / τ)` over options | `softmax(cos / τ)` over levels |
 | reference / human | one-hot | one-hot | one-hot |
 
-When a fallback was used, the prediction records it in a `notes` list.
+When a fallback was used, the prediction records it in `notes`.
+
+In all-in-one mode the response schema is `{results: [{ref, <per-email answers>}]}`, with `ref` restricted
+to an enum of the refs that were sent. The schema's size does not depend on how many emails are in the
+prompt. Parsing rules:
+
+- A ref missing from the response → that email gets an error.
+- A duplicated ref → the first occurrence wins, with a note.
+- A truncated or unparseable response (`finish_reason = "length"`, invalid JSON) or a timeout → every
+  email in the request gets that error.
 
 ## 6. Components (`src/jev_bench/`, one responsibility per module)
 
@@ -190,11 +248,13 @@ When a fallback was used, the prediction records it in a `notes` list.
 | `settings.py` | env settings (pydantic-settings) |
 | `questions.py` | question-set models (discriminated union), TOML loader, question rendering for prompts |
 | `emails.py` | `Email` model and `to_state()` |
-| `openrouter.py` | shared `httpx.AsyncClient` wrapper: auth, timeouts, retry with jittered backoff on 429/5xx/524/529/transport errors, typed `OpenRouterError(status, fatal)`; 401/402/403 are fatal |
-| `catalog.py` | fetch and filter the OpenRouter catalog per column (`structured_outputs` required, `:batch` excluded), in-memory TTL cache (1 h) |
-| `classifiers/base.py` | `Classifier` protocol, `Classification` result model |
+| `openrouter.py` | shared `httpx.AsyncClient` wrapper: auth, timeouts, JSON and SSE-stream POST, retry with jittered backoff on 429/5xx/524/529/transport errors, typed `OpenRouterError(status, fatal)`; 401/402/403 are fatal |
+| `catalog.py` | fetch and filter the OpenRouter catalog per column (chat: `structured_outputs` required, `:batch` excluded), in-memory TTL cache (1 h), `ModelInfo` with pricing, limits and a cost estimate |
+| `classifiers/base.py` | `Classifier` protocol: `emails_per_request`, `prepare()` (one-off setup), `classify(emails) -> RequestResult` (per-email answers or errors, plus the request's usage, latency and raw body) |
 | `classifiers/jev.py` | Decisions request builder and response → distributions |
-| `classifiers/llm.py` | chat request builder (prompt + JSON schema) and response → distributions |
+| `classifiers/llm_schema.py` | JSON schema builders (single email; `results[]` array for all-in-one) |
+| `classifiers/llm.py` | chat classifier for both modes: prompt rendering, request, parsing and normalization |
+| `classifiers/embeddings.py` | embed the option texts in `prepare()`, embed emails per request, cosine → softmax(τ) |
 | `generation/config.py` | `generation.toml` models and loader |
 | `generation/plan.py` | deterministic trait plan from a seed (stratified or weighted), `sent_at` sampling |
 | `generation/prompt.py` | template rendering, generator JSON schema (`email` + `answers` with per-question enums) |
@@ -202,8 +262,8 @@ When a fallback was used, the prediction records it in a `notes` list.
 | `store/jsonfiles.py` | atomic JSON write, JSONL append and read |
 | `store/generations.py`, `store/runs.py`, `store/labels.py` | persistence per entity |
 | `jobs.py` | registry of background asyncio tasks (runs and generations): live progress, cancel, graceful shutdown |
-| `runner.py` | executes one benchmark run: semaphore concurrency, per-email classification, append predictions, finalize totals |
-| `metrics/distributions.py` | argmax, entropy, Jensen–Shannon divergence, expected score |
+| `runner.py` | executes one benchmark run: `prepare()`, chunk emails by `emails_per_request`, run requests under a semaphore, split costs across emails, append results, finalize totals |
+| `metrics/distributions.py` | argmax, entropy, Jensen–Shannon divergence, expected score, softmax |
 | `metrics/agreement.py` | percent agreement, Cohen's κ (nominal and quadratic-weighted), Fleiss' κ, Pearson r, Brier score |
 | `metrics/bootstrap.py` | vectorized percentile bootstrap CI (numpy, fixed seed) |
 | `compare.py` | build raters (runs, reference, human) and the comparison report per question and per email |
@@ -213,7 +273,8 @@ When a fallback was used, the prediction records it in a `notes` list.
 | `cli.py` | typer app: `serve`, `generate`, `run` (lazy imports: `--help` < 500 ms) |
 
 Dependencies point one way: `web` / `cli` → `runner` / `generation` / `compare` → `classifiers` /
-`store` / `metrics` → `questions` / `emails` / `settings`. `metrics` is pure numpy with no I/O.
+`store` / `metrics` → `questions` / `emails` / `catalog` / `openrouter` / `settings`. `metrics` is pure
+numpy with no I/O.
 
 ## 7. Flows
 
@@ -234,15 +295,22 @@ A failed item is counted in `errors` and logged, and the generation continues. F
 
 ### Benchmark run
 
-`POST /api/runs {column, model, generation_ids}` or `jev-bench run --column … --generations …`:
+`POST /api/runs {column, model, generation_ids, mode?}` or `jev-bench run --column … --generations …
+[--mode per_email|all_in_one]`:
 
 1. Load the emails as the union of the chosen generations.
 2. Write `run.json` (`running`).
-3. Make one classification call per email **with all questions** (Jev's recommended usage; LLMs get the
-   same granularity, so cost and latency compare like-for-like), under a semaphore (`concurrency`).
-4. Append each `Prediction`: a per-email failure fills `error` and the run continues; a fatal error ends
-   the run as `failed`.
-5. Finalize the totals.
+3. Call `prepare()`. For embeddings this embeds the option texts once, and the cost is recorded as
+   `setup_cost`.
+4. Chunk the emails by `emails_per_request`:
+   - Jev: 1 (one call per email with all questions, Jev's recommended usage);
+   - chat per-email: 1;
+   - chat all-in-one: every email;
+   - embeddings: `[embeddings].emails_per_request`.
+5. Run the requests under a semaphore (`concurrency`).
+6. Append a `Prediction` for each email of a finished request. A per-email failure fills `error` and the
+   run continues; a fatal error ends the run as `failed`.
+7. Finalize the totals.
 
 Duration is wall clock (`perf_counter`) from the first request to the last result. Cancel →
 `cancelled`.
@@ -250,13 +318,15 @@ Duration is wall clock (`perf_counter`) from the first request to the last resul
 ### Live progress
 
 `GET /api/runs/{id}` and `GET /api/generations/{id}` merge the persisted meta with in-memory job progress
-(`done`, `errors`, `cost_so_far`, `elapsed_s`). The UI polls every second while `running`.
+(`done`, `errors`, `cost_so_far`, `elapsed_s`). The UI polls every second while `running`. In all-in-one
+mode, `done` is estimated while streaming by counting completed `ref` entries in the received text, and it
+becomes exact once parsing finishes.
 
 ## 8. Comparison and metrics
 
 A **rater** is any source of distributions over `(email_id, question_id)`:
 
-- a run (one rater per run);
+- a run (one rater per run, whatever its column or mode);
 - `reference`, the generator's answers, always present for generated emails;
 - `human`, included only when at least one compared email has a label.
 
@@ -273,16 +343,28 @@ whose option ids match across the raters' question-set snapshots (mismatches are
   - Pearson r of P(yes) (noul) or of the expected level (score); `null` when variance is 0;
   - 95 % bootstrap CIs (1000 resamples) for agreement and κ;
   - against a hard-label rater (reference or human), also the multi-class Brier score.
-- **Group:** Fleiss' κ over the compared model runs, on emails that all of them answered. It is `null`
-  when fewer than two runs are compared.
-- **Per email:** disagreement index = mean pairwise JSD across model raters, averaged over questions. It
-  sorts the Explorer so the most contested emails come first.
+- **Group:** Fleiss' κ over the compared runs, on emails that all of them answered. It is `null` when fewer
+  than two runs are compared.
+- **Per email:** disagreement index = mean pairwise JSD across the compared runs, averaged over questions.
+  It sorts the Explorer so the most contested emails come first.
 - Argmax ties resolve to the first option in question order, which is deterministic.
+
+Comparing a chat model's *per email* and *all in one* runs is an ordinary pairwise comparison between two
+raters. It directly measures how much packing emails into one prompt changes the answers.
 
 ## 9. Caveats (made explicit, not solved)
 
-- Verbalized LLM probabilities are not calibrated the way Jev claims to be. Argmax-based metrics (agreement,
-  κ) are the primary comparison. JSD and Brier also reflect each model's calibration style.
+- **Verbalized LLM probabilities** are not calibrated the way Jev claims to be. Argmax-based metrics
+  (agreement, κ) are the primary comparison. JSD and Brier also reflect each model's calibration style.
+- **Embeddings measure topical similarity, not entailment.** They are expected to be weak on yes/no
+  questions and negations; that is the point of the baseline. τ only reshapes the distributions (argmax
+  metrics do not depend on it), and it is fixed in config. Tuning τ on reference answers is forbidden,
+  because generator answers must never feed the benchmark. Some option texts may be close to every email
+  ("hubness"); per-option centering is a possible later knob.
+- **All in one** lets emails influence each other and adds position effects. It is bounded by the model's
+  output limit (about 300 emails at ~400 tokens each for 128k), and one failure (truncation, timeout)
+  fails every email in the request. Per-email latency is meaningless in this mode; only the run duration
+  and the request latency are reported.
 - `sent_at` is generated and stored but never sent to the models (explicit requirement). Relative dates in
   the body ("by tomorrow") remain interpretable.
 - Reference answers come from the generator LLM: they are a weak reference, not ground truth.
@@ -298,36 +380,53 @@ some contain deliberate injections.
 
 | page | content |
 |---|---|
-| **Benchmark** `/` | generation multi-select. Three column cards (Jev / Anthropic / OpenAI), each with: model `<select>` from the catalog (showing price per 1M in/out), Run and Cancel, progress bar, live elapsed time, cost, tokens, errors, p50/p95 latency. Below: the comparison of the latest completed run per column whose `generation_ids` set equals the selected set (overridable with `?runs=a,b,c`): a summary table, then per question an argmax-count bar chart (raters side by side), pairwise metric tables with CIs, Fleiss' κ and per-rater entropy. |
+| **Benchmark** `/` | See below. |
 | **Generations** `/generations.html` | list (name, created, count, models, cost, status, mismatches), a "New generation" form (name, count, seed, models) with live progress |
-| **Explorer** `/explorer.html` | select generations and optional runs; filter by generator model, reference answer, trait or text search; sort by disagreement. A detail panel shows headers, `sent_at`, body, traits, reference answers, each rater's distribution per question (mini bars) and a manual labelling form. |
-| **Runs** `/runs.html` | history table with checkboxes → "Compare" (Benchmark `?runs=`) and "Explore" (Explorer `?runs=`) |
+| **Explorer** `/explorer.html` | select generations and optional runs; filter by generator model, reference answer, trait or text search; sort by disagreement. A detail panel shows headers, `sent_at`, body, traits, reference answers, each run's distribution per question (mini bars; embeddings also show cosines) and a manual labelling form. |
+| **Runs** `/runs.html` | history table (column, model, mode, generations, status, duration, cost, errors) with checkboxes → "Compare" (Benchmark `?runs=`) and "Explore" (Explorer `?runs=`) |
+
+The Benchmark page has three parts:
+
+- A generation multi-select.
+- Four column cards (Jev / Anthropic / OpenAI / Embeddings; 4-up on wide screens, 2×2 on medium). Each
+  card has a model `<select>` from the catalog (showing price per 1M in/out), Run and Cancel, progress bar,
+  live elapsed time, cost, tokens, errors and p50/p95 request latency.
+  - The chat cards add a mode toggle (*per email* / *all in one*). It shows an inline warning when
+    `n_emails × est_output_tokens_per_email` exceeds the model's `max_completion_tokens`.
+  - The embeddings card shows τ and the batch size.
+- The comparison of the latest completed run per column whose `generation_ids` set equals the selected set
+  (overridable with `?runs=a,b,c`): a summary table, then per question an argmax-count bar chart (raters
+  side by side), pairwise metric tables with CIs, Fleiss' κ and per-rater entropy.
 
 ## 11. HTTP API (`/api`)
 
 | method + path | purpose |
 |---|---|
-| `GET /catalog` | columns with their model lists and defaults |
+| `GET /catalog` | columns with their model lists (pricing, limits) and defaults |
 | `GET /generations` · `POST /generations` · `GET /generations/{id}` · `POST /generations/{id}/cancel` | generations |
-| `GET /runs?generations=` · `POST /runs` · `GET /runs/{id}` · `POST /runs/{id}/cancel` | runs |
+| `GET /runs?generations=` · `POST /runs` · `GET /runs/{id}` · `POST /runs/{id}/cancel` | runs (`POST` body: `column`, `model`, `generation_ids`, `mode`) |
 | `GET /compare?runs=a,b,c` | comparison report (reference always included; human if any labels) |
 | `GET /emails?generations=…&runs=…` | email rows, plus per-rater argmax and a disagreement index when runs are given |
 | `GET /emails/{email_id}?runs=…` | full email, reference, predictions, human label |
 | `PUT /labels/{email_id}` | set or clear human answers `{question_id: option_id \| null}` |
 
 A missing `OPENROUTER_API_KEY` returns 400 on `POST /generations` and `POST /runs`. Catalog, browsing and
-comparison work without a key.
+comparison work without a key. `mode` is only accepted for chat columns.
 
 ## 12. Testing
 
-- pytest with one test file per module. OpenRouter is mocked with `httpx.MockTransport`, and routes are
-  tested through `httpx.ASGITransport`. No real network in the default suite.
+- pytest with one test file per module. OpenRouter is mocked with `httpx.MockTransport`, including JSON
+  bodies, SSE streams and embedding vectors with known cosines. Routes are tested through
+  `httpx.ASGITransport`. No real network in the default suite.
+- All-in-one parsing is table-driven: complete, missing ref, duplicate ref, truncated (`finish_reason =
+  "length"`) and invalid JSON.
 - Hypothesis properties for the metrics and normalization: JSD symmetric and in [0, 1] with JSD(p, p) = 0;
-  κ(a, a) = 1; agreement in [0, 1]; normalized distributions sum to 1.
+  κ(a, a) = 1; agreement in [0, 1]; normalized distributions and softmax sum to 1; argmax of softmax is
+  invariant to τ.
 - Known-value tests: Cohen's κ against a textbook confusion matrix, Fleiss' κ against the Wikipedia worked
   example (0.210).
-- An opt-in `@pytest.mark.integration` smoke test calls the real OpenRouter for one email per column (needs
-  a key).
+- An opt-in `@pytest.mark.integration` smoke test calls the real OpenRouter for one email per column and
+  mode (needs a key).
 - Gates: `ruff check`, `ruff format`, `pyright`, `pytest --cov --cov-fail-under=95`. Default suite
   < 5 s. The UI is smoke-tested manually in a browser.
 
