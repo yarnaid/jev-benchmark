@@ -1,7 +1,7 @@
 """Parsing of chat-model answers: per-email probabilities, all-in-one results, streaming progress.
 
 Constants:
-    REF_TOKEN: the JSON key counted to estimate all-in-one progress.
+    REF_KEY: the JSON key counted to estimate all-in-one progress.
 Classes:
     RefCounter: counts completed `"ref"` keys in a text stream.
 Functions:
@@ -16,7 +16,7 @@ from jev_bench.classifiers.base import ProgressCallback
 from jev_bench.metrics.distributions import normalize, unit_probability
 from jev_bench.questions import AnyQuestion, Distribution, NoulQuestion, QuestionSet
 
-REF_TOKEN = '"' + "ref" + '"'
+REF_KEY = '"ref"'
 
 
 def parse_email_answers(
@@ -70,8 +70,8 @@ class RefCounter:
 
     def feed(self, text: str) -> None:
         window = self._tail + text
-        found = window.count(REF_TOKEN)
+        found = window.count(REF_KEY)
         if found:
             self.count += found
             self._callback(self.count)
-        self._tail = window[-(len(REF_TOKEN) - 1) :]
+        self._tail = window[-(len(REF_KEY) - 1) :]
