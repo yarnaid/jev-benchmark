@@ -11,6 +11,7 @@ Classes:
     JobRegistry: start / progress / is_running / cancel / shutdown.
 Functions:
     cancel_status: the status a cancelled job should persist.
+    unwrap_leaf: first non-group exception inside a (possibly nested) ExceptionGroup.
     describe_error: human-readable message of an exception (first leaf of an ExceptionGroup).
 """
 
@@ -107,7 +108,13 @@ def cancel_status(exc: asyncio.CancelledError) -> JobStatus:
     return "interrupted" if exc.args and exc.args[0] == SHUTDOWN else "cancelled"
 
 
+def unwrap_leaf(exc: BaseException) -> BaseException:
+    leaf = exc
+    while isinstance(leaf, BaseExceptionGroup) and leaf.exceptions:
+        leaf = leaf.exceptions[0]
+    return leaf
+
+
 def describe_error(exc: BaseException) -> str:
-    while isinstance(exc, BaseExceptionGroup) and exc.exceptions:
-        exc = exc.exceptions[0]
-    return str(exc) or type(exc).__name__
+    leaf = unwrap_leaf(exc)
+    return str(leaf) or type(leaf).__name__

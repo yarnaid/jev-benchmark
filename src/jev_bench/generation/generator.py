@@ -23,7 +23,7 @@ from pydantic import SecretStr
 
 from jev_bench.classifiers.base import usage_from_body
 from jev_bench.emails import Email, email_id
-from jev_bench.failures import failure_text, unwrap_leaf
+from jev_bench.failures import failure_text, log_job_failure
 from jev_bench.generation.config import GenerationConfig
 from jev_bench.generation.plan import PlanItem, ResolvedTrait, resolve_traits
 from jev_bench.generation.prompt import (
@@ -74,18 +74,10 @@ async def execute_generation(
         raise
     except Exception as exc:
         text = failure_text(exc)
-        _log_job_failure(meta.id, exc, text)
+        log_job_failure(exc, text, generation=meta.id)
         _finish(deps.store, meta, progress, tally, "failed", text, started)
         return
     _finish(deps.store, meta, progress, tally, "completed", None, started)
-
-
-def _log_job_failure(generation_id: str, exc: Exception, text: str) -> None:
-    bound = logger.bind(generation=generation_id)
-    if isinstance(unwrap_leaf(exc), OpenRouterError):
-        bound.error(text)
-    else:
-        bound.opt(exception=exc).error("generation failed")
 
 
 async def _generate_all(
