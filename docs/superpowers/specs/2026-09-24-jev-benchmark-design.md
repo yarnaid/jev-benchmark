@@ -181,9 +181,23 @@ Types mirror Jev primitives. Option ids are snake_case.
 
 ### Environment (`.env`, via pydantic-settings)
 
-`OPENROUTER_API_KEY` (required only to generate or run), `JEV_BENCH_DATA_DIR` (default `./data`),
-`JEV_BENCH_CONFIG_DIR` (default `./config`), `JEV_BENCH_REQUEST_TIMEOUT_S` (default 60),
-`JEV_BENCH_MAX_RETRIES` (default 3).
+`OPENROUTER_API_KEY` (optional), `JEV_BENCH_DATA_DIR` (default `./data`), `JEV_BENCH_CONFIG_DIR` (default
+`./config`), `JEV_BENCH_REQUEST_TIMEOUT_S` (default 60), `JEV_BENCH_MAX_RETRIES` (default 3).
+
+### API key resolution
+
+A key is needed only to generate or run.
+
+1. The server key from `.env` / the environment always wins, if it is set.
+2. Otherwise, the key the user entered in the UI is used. It is kept in the browser's `localStorage` and sent
+   as the `X-OpenRouter-Key` header, only on the calls that start work: `POST /generations` and `POST /runs`.
+3. Otherwise, those calls return 400 and the UI opens the key dialog.
+
+When the server key is set, the header is ignored. The CLI uses only `.env` / the environment.
+
+The key is passed explicitly to each job and lives only in that job's memory until it ends. It is never set
+on the shared HTTP client, never persisted (`run.json`, `generation.json` and `responses.jsonl` hold
+response bodies only, never request headers) and never logged.
 
 ## 4. Data model and storage (JSON/JSONL files under `data/`)
 
@@ -278,7 +292,8 @@ prompt. Parsing rules:
 | `settings.py` | env settings (pydantic-settings) |
 | `questions.py` | question-set models (discriminated union), TOML loader, question rendering for prompts |
 | `emails.py` | `Email` model and `to_state()` |
-| `openrouter.py` | shared `httpx.AsyncClient` wrapper: auth, timeouts, JSON and SSE-stream POST, retry with jittered backoff on 429/5xx/524/529/transport errors, typed `OpenRouterError(status, fatal)`; 401/402/403 are fatal |
+| `web/api_key.py` | FastAPI dependency resolving the job's API key (server key → header → 400) |
+| `openrouter.py` | shared `httpx.AsyncClient` wrapper: per-call API key (never on the shared client), timeouts, JSON and SSE-stream POST, retry with jittered backoff on 429/5xx/524/529/transport errors, typed `OpenRouterError(status, fatal)`; 401/402/403 are fatal |
 | `catalog.py` | fetch and filter the OpenRouter catalog per column (chat: `structured_outputs` required, `:batch` excluded), in-memory TTL cache (1 h), `ModelInfo` with pricing, limits and a cost estimate |
 | `classifiers/base.py` | `Classifier` protocol: `emails_per_request`, `prepare()` (one-off setup), `classify(emails) -> RequestResult` (per-email answers or errors, plus the request's usage, latency and raw body) |
 | `classifiers/jev.py` | Decisions request builder and response → distributions |
@@ -442,6 +457,11 @@ raters. It directly measures how much packing emails into one prompt changes the
   reconstructable for cached work, so it is reported as measured.
 - `sent_at` is sent to every column as part of the email (explicit requirement). Models have no separate
   notion of "now", so urgency is judged relative to `sent_at` and the body.
+- **A browser-stored key is only as safe as the page's JavaScript.** Any script on the origin can read
+  `localStorage`. The mitigations are SRI on the CDN assets, a strict CSP and `textContent`-only
+  rendering of email text.
+- **The key travels over plain HTTP.** `jev-bench serve` binds to `127.0.0.1` by default and prints a
+  yellow warning when `--host` is not loopback.
 - Reference answers come from the generator LLM: they are a weak reference, not ground truth.
 - Prompt caching lowers LLM cost on repeated system prompts. It is on by default because it reflects real
   deployment, and it is recorded in the run's param snapshot.
@@ -449,9 +469,21 @@ raters. It directly measures how much packing emails into one prompt changes the
 ## 10. Web UI (vanilla HTML + ES modules, no build step)
 
 Bootstrap 5.3 (built-in dark mode), Bootstrap Icons, Chart.js 4, and the Inter and JetBrains Mono fonts
-(Google Fonts), all from a CDN with pinned versions. A shared `layout.js` injects the navbar. All
-email-derived text is rendered with `textContent` or escaping, never `innerHTML`: emails are untrusted and
-some contain deliberate injections.
+(Google Fonts), all from a CDN with pinned versions and **SRI `integrity` hashes**. A shared `layout.js`
+injects the navbar.
+
+All email-derived text is rendered with `textContent` or escaping, never `innerHTML`: emails are untrusted
+and some contain deliberate injections. This matters more now that an API key may sit in `localStorage`.
+The server sends a Content-Security-Policy: `script-src 'self' https://cdn.jsdelivr.net`, style and font
+sources limited to self + jsDelivr + Google Fonts, no inline scripts.
+
+**API key in the navbar:**
+
+- `GET /api/status` → `{server_key: bool}`.
+- With a server key, the navbar shows a green "server key" badge and no input.
+- Without one, it shows a key button: yellow when no key is stored, green when one is.
+- The button opens a modal with a password field, Save (to `localStorage`) and Forget (removes it).
+- Starting a run or a generation without any key opens the modal instead.
 
 | page | content |
 |---|---|
@@ -478,6 +510,7 @@ The Benchmark page has three parts:
 
 | method + path | purpose |
 |---|---|
+| `GET /status` | `{server_key: bool}`, whether the UI needs to supply a key |
 | `GET /catalog` | columns with their model lists (pricing, limits) and defaults |
 | `GET /generations` · `POST /generations` · `GET /generations/{id}` · `POST /generations/{id}/cancel` | generations |
 | `GET /runs?generations=` · `POST /runs` · `GET /runs/{id}` · `POST /runs/{id}/cancel` | runs (`POST` body: `column`, `model`, `generation_ids`, `mode`) |
@@ -486,8 +519,9 @@ The Benchmark page has three parts:
 | `GET /emails/{email_id}?runs=…` | full email, reference, predictions, human label |
 | `PUT /labels/{email_id}` | set or clear human answers `{question_id: option_id \| null}` |
 
-A missing `OPENROUTER_API_KEY` returns 400 on `POST /generations` and `POST /runs`. Catalog, browsing and
-comparison work without a key. `mode` is only accepted for chat columns.
+`GET /status` returns `{server_key: bool}`. `POST /generations` and `POST /runs` resolve the key as in §3
+(server key → `X-OpenRouter-Key` header → 400). Catalog, browsing and comparison work without a key.
+`mode` is only accepted for chat columns.
 
 ## 12. Testing
 
@@ -503,6 +537,12 @@ comparison work without a key. `mode` is only accepted for chat columns.
   - output-bound versus input-bound splits;
   - an oversize single email flagged and never sent;
   - order preserved.
+- API key resolution is table-driven:
+  - a server key wins and the header is ignored;
+  - with no server key, the header is used;
+  - with neither, 400;
+  - a sentinel key string never appears in the written `run.json` / `generation.json` /
+    `responses.jsonl` or in captured logs.
 - The embedding cache is covered for:
   - hit, miss and partial hit (only misses are sent);
   - key change on a template edit;
