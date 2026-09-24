@@ -41,6 +41,26 @@ async def test_start_tracks_progress_and_forgets_when_done() -> None:
     assert registry.progress("job-1") is None
 
 
+async def test_start_raises_on_duplicate_job_id() -> None:
+    registry = JobRegistry()
+    gate = asyncio.Event()
+
+    async def body(progress: JobProgress) -> None:
+        await gate.wait()
+
+    task = registry.start("job", 1, body)
+    await asyncio.sleep(0)
+    assert registry.is_running("job")
+    with pytest.raises(ValueError, match="job 'job' is already running"):
+        registry.start("job", 1, body)
+    assert registry.is_running("job")
+    assert registry.progress("job") is not None
+    gate.set()
+    await task
+    await asyncio.sleep(0)
+    assert not registry.is_running("job")
+
+
 def test_progress_view_caps_done_at_total() -> None:
     progress = JobProgress(3, FakeClock())
     progress.done = 2

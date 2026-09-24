@@ -3,6 +3,7 @@
 Constants:
     SHUTDOWN: cancellation message used when the server stops (persisted as `interrupted`).
 Types:
+    Clock: time function signature.
     JobBody
 Classes:
     ProgressView: immutable progress snapshot served to the UI.
@@ -68,6 +69,8 @@ class JobRegistry:
         self._progress: dict[str, JobProgress] = {}
 
     def start(self, job_id: str, total: int, body: JobBody) -> asyncio.Task[None]:
+        if job_id in self._tasks:
+            raise ValueError(f"job {job_id!r} is already running")
         progress = JobProgress(total, self._clock)
         task = asyncio.create_task(body(progress), name=job_id)
         self._tasks[job_id] = task
