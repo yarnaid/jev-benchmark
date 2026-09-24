@@ -8,6 +8,7 @@ Classes:
 from collections.abc import Iterable
 from pathlib import Path
 
+from loguru import logger
 from pydantic import AwareDatetime, BaseModel
 
 from jev_bench.emails import Email
@@ -61,11 +62,17 @@ class GenerationStore:
             for path in self._root.iterdir()
             if is_safe_id(path.name) and (path / META_FILE).exists()
         ]
-        return sorted(
-            (self.get(generation_id) for generation_id in ids),
-            key=lambda meta: meta.id,
-            reverse=True,
-        )
+        metas = [meta for meta in (self._safe_get(gen_id) for gen_id in ids) if meta is not None]
+        return sorted(metas, key=lambda meta: meta.id, reverse=True)
+
+    def _safe_get(self, generation_id: str) -> GenerationMeta | None:
+        try:
+            return self.get(generation_id)
+        except ValueError as exc:
+            logger.bind(path=str(self._dir(generation_id) / META_FILE)).warning(
+                "skipping unreadable meta: {}", exc
+            )
+            return None
 
     def append_email(self, generation_id: str, email: Email) -> None:
         append_jsonl(self._dir(generation_id) / EMAILS_FILE, [email.model_dump(mode="json")])

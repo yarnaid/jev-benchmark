@@ -1,5 +1,6 @@
 """Tests for jev_bench.store.generations."""
 
+import json
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
@@ -9,7 +10,7 @@ from tests.factories import EmailFactory
 
 from jev_bench.generation.config import GenerationConfig
 from jev_bench.questions import QuestionSet
-from jev_bench.store.generations import GenerationMeta, GenerationStore
+from jev_bench.store.generations import META_FILE, GenerationMeta, GenerationStore
 
 type StoreCall = Callable[[GenerationStore], object]
 
@@ -44,6 +45,26 @@ def test_save_get_and_list(tmp_path: Path, questions: QuestionSet) -> None:
 
 def test_list_on_missing_root_is_empty(tmp_path: Path) -> None:
     assert GenerationStore(tmp_path / "missing").list_metas() == []
+
+
+@pytest.mark.parametrize(
+    "corrupt_content",
+    [
+        pytest.param("not json {{{", id="corrupt-meta-skipped"),
+    ],
+)
+def test_list_metas_skips_unreadable_meta(
+    tmp_path: Path, questions: QuestionSet, corrupt_content: str
+) -> None:
+    store = GenerationStore(tmp_path)
+    store.save(_meta("20260924-100000-a-0001", questions))
+    invalid_json_dir = tmp_path / "20260924-110000-bad-json-0002"
+    invalid_json_dir.mkdir()
+    (invalid_json_dir / META_FILE).write_text(corrupt_content, encoding="utf-8")
+    schema_invalid_dir = tmp_path / "20260924-120000-bad-schema-0003"
+    schema_invalid_dir.mkdir()
+    (schema_invalid_dir / META_FILE).write_text(json.dumps({"id": "x"}), encoding="utf-8")
+    assert [meta.id for meta in store.list_metas()] == ["20260924-100000-a-0001"]
 
 
 def test_emails_round_trip_and_lookup(tmp_path: Path, questions: QuestionSet) -> None:

@@ -13,6 +13,7 @@ from collections.abc import Iterable
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
+from loguru import logger
 from pydantic import AwareDatetime, BaseModel, Field
 
 from jev_bench.benchmark_config import (
@@ -117,11 +118,17 @@ class RunStore:
             for path in self._root.iterdir()
             if is_safe_id(path.name) and (path / META_FILE).exists()
         ]
-        return sorted(
-            (self.get(run_id) for run_id in ids),
-            key=lambda meta: meta.id,
-            reverse=True,
-        )
+        metas = [meta for meta in (self._safe_get(run_id) for run_id in ids) if meta is not None]
+        return sorted(metas, key=lambda meta: meta.id, reverse=True)
+
+    def _safe_get(self, run_id: str) -> RunMeta | None:
+        try:
+            return self.get(run_id)
+        except ValueError as exc:
+            logger.bind(path=str(self._dir(run_id) / META_FILE)).warning(
+                "skipping unreadable meta: {}", exc
+            )
+            return None
 
     def append_predictions(self, run_id: str, predictions: Iterable[Prediction]) -> None:
         records = [prediction.model_dump(mode="json") for prediction in predictions]

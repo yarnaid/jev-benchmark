@@ -3,7 +3,7 @@
 Classes:
     CancelView: whether a cancel request reached a running job.
 Functions:
-    load_or_404: load an item by id, turning a missing or unsafe id into HTTP 404.
+    load_or_404: load an item by id, turning a missing, unsafe or unreadable id into HTTP 404.
 """
 
 from collections.abc import Callable
@@ -19,6 +19,6 @@ class CancelView(BaseModel):
 def load_or_404[T](load: Callable[[str], T], item_id: str, label: str) -> T:
     try:
         return load(item_id)
-    except KeyError as exc:
+    except (KeyError, ValueError) as exc:
         detail = f"unknown {label} {item_id!r}"
         raise HTTPException(status_code=404, detail=detail) from exc

@@ -1,5 +1,6 @@
 """Tests for jev_bench.store.runs."""
 
+import json
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -7,7 +8,7 @@ import pytest
 
 from jev_bench.benchmark_config import EmbeddingParams, JevParams, LlmParams
 from jev_bench.questions import QuestionSet
-from jev_bench.store.runs import Prediction, ResponseRecord, RunMeta, RunParams, RunStore
+from jev_bench.store.runs import META_FILE, Prediction, ResponseRecord, RunMeta, RunParams, RunStore
 
 
 def _meta(run_id: str, questions: QuestionSet, params: RunParams) -> RunMeta:
@@ -66,6 +67,26 @@ def test_list_metas_sorted_newest_first(tmp_path: Path, questions: QuestionSet) 
         "20260924-110000-b-0002",
         "20260924-100000-a-0001",
     ]
+
+
+@pytest.mark.parametrize(
+    "corrupt_content",
+    [
+        pytest.param("not json {{{", id="corrupt-meta-skipped"),
+    ],
+)
+def test_list_metas_skips_unreadable_meta(
+    tmp_path: Path, questions: QuestionSet, corrupt_content: str
+) -> None:
+    store = RunStore(tmp_path)
+    store.save(_meta("20260924-100000-a-0001", questions, JevParams()))
+    invalid_json_dir = tmp_path / "20260924-110000-bad-json-0002"
+    invalid_json_dir.mkdir()
+    (invalid_json_dir / META_FILE).write_text(corrupt_content, encoding="utf-8")
+    schema_invalid_dir = tmp_path / "20260924-120000-bad-schema-0003"
+    schema_invalid_dir.mkdir()
+    (schema_invalid_dir / META_FILE).write_text(json.dumps({"id": "x"}), encoding="utf-8")
+    assert [meta.id for meta in store.list_metas()] == ["20260924-100000-a-0001"]
 
 
 def test_predictions_and_responses_round_trip(tmp_path: Path, questions: QuestionSet) -> None:
