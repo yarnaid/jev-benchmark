@@ -24,7 +24,8 @@ from jev_bench.classifiers.base import (
     failed_result,
 )
 from jev_bench.emails import Email
-from jev_bench.jobs import JobProgress, cancel_status, describe_error
+from jev_bench.failures import failure_text
+from jev_bench.jobs import JobProgress, cancel_status
 from jev_bench.openrouter import OpenRouterError
 from jev_bench.request_plan import RequestPlan, chunk_by_count, plan_requests
 from jev_bench.store.runs import Prediction, ResponseRecord, RunMeta, RunStore
@@ -48,19 +49,9 @@ async def execute_run(
         raise
     except Exception as exc:
         logger.bind(run=meta.id).opt(exception=exc).error("run failed")
-        _finish(store, meta.id, "failed", _run_error(exc), started)
+        _finish(store, meta.id, "failed", failure_text(exc), started)
         return
     _finish(store, meta.id, "completed", None, started)
-
-
-def _run_error(exc: BaseException) -> str:
-    leaf = exc
-    while isinstance(leaf, BaseExceptionGroup) and leaf.exceptions:
-        leaf = leaf.exceptions[0]
-    message = describe_error(exc)
-    if isinstance(leaf, OpenRouterError):
-        return message
-    return f"{type(leaf).__name__}: {message}"
 
 
 async def _execute(

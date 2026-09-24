@@ -6,6 +6,7 @@ inside a timed test.
 Fixtures:
     questions: a three-question set covering every question type.
     make_client: async OpenRouterClient factory.
+    make_services: async Services factory on tmp dirs.
 Hooks:
     pytest_configure: pre-warm numpy.random module.
     pytest_collection_modifyitems: mark tests listed in tests/slow_tests.txt as `slow`.
@@ -17,10 +18,11 @@ from pathlib import Path
 
 import httpx2
 import pytest
-from tests.factories import ClientFactory
+from tests.factories import ClientFactory, ServicesFactory, mini_settings
 
 from jev_bench.openrouter import OpenRouterClient
 from jev_bench.questions import ChoiceQuestion, NoulQuestion, QuestionSet, ScoreQuestion
+from jev_bench.services import Services
 
 _SLOW_LIST = Path(__file__).with_name("slow_tests.txt")
 type Handler = Callable[[httpx2.Request], httpx2.Response]
@@ -81,6 +83,25 @@ async def make_client() -> AsyncIterator[ClientFactory]:
         )
         opened.append(http)
         return OpenRouterClient(http, max_retries=max_retries, retry_base_delay_s=0.0)
+
+    yield build
+    for http in opened:
+        await http.aclose()
+
+
+@pytest.fixture
+async def make_services(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> AsyncIterator[ServicesFactory]:
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    opened: list[httpx2.AsyncClient] = []
+
+    def build(handler: Handler, *, api_key: str | None = None) -> Services:
+        http = httpx2.AsyncClient(
+            base_url="https://openrouter.test/api", transport=httpx2.MockTransport(handler)
+        )
+        opened.append(http)
+        return Services(mini_settings(tmp_path, api_key), http)
 
     yield build
     for http in opened:
