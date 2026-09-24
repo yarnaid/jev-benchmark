@@ -3,12 +3,15 @@
 Classes:
     PartyFactory: named mailbox.
     EmailFactory: generated email with deterministic ids and a fixed sent_at.
+    FakeOpenRouter: MockTransport handler serving /v1/models, /alpha/decisions,
+        /v1/chat/completions and /v1/embeddings for the mini question set.
 Functions:
     chat_body: OpenRouter chat completion response.
     sse_body: OpenRouter streaming chat completion response.
     write_mini_config: write a mini questions/benchmark/generation TOML config to a directory.
     mini_settings: isolated Settings over a mini config, reading no env or `.env`.
     generator_output: JSON text of one generator response.
+    seed_generation: save a completed GenerationMeta plus its emails to services.generations.
 Constants:
     MINI_QUESTIONS_TOML, MINI_BENCHMARK_TOML, MINI_GENERATION_TOML: mini config file contents.
 Types:
@@ -22,6 +25,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+import httpx2
 from factory.base import Factory
 from factory.declarations import LazyFunction, SubFactory
 from factory.declarations import Sequence as FactorySequence
@@ -30,6 +34,7 @@ from jev_bench.emails import Email, Party
 from jev_bench.openrouter import OpenRouterClient
 from jev_bench.services import Services
 from jev_bench.settings import Settings
+from jev_bench.store.generations import GenerationMeta
 
 
 class PartyFactory(Factory[Party]):
@@ -214,3 +219,130 @@ def generator_output(category: str = "spam") -> str:
             "answers": {"category": category, "urgency": "now", "needs_reply": "no"},
         }
     )
+
+
+CHAT_ANSWER: dict[str, Any] = {
+    "category": {"spam": 0.7, "personal": 0.2, "work": 0.1},
+    "urgency": {"low": 0.1, "today": 0.3, "now": 0.6},
+    "needs_reply": 0.2,
+}
+JEV_ANSWERS: dict[str, Any] = {
+    "category": {
+        "type": "choice",
+        "choice": "spam",
+        "probabilities": {"spam": 0.8, "personal": 0.1, "work": 0.1},
+    },
+    "urgency": {
+        "type": "score",
+        "score": 1.8,
+        "probabilities": {"0": 0.05, "1": 0.1, "2": 0.85},
+    },
+    "needs_reply": {"type": "noul", "noul": 0.15},
+}
+_CATALOG: dict[str, list[dict[str, Any]]] = {
+    "text": [
+        {
+            "id": "anthropic/claude-sonnet-5",
+            "name": "Claude Sonnet 5",
+            "pricing": {"prompt": "0.000002", "completion": "0.00001"},
+            "context_length": 1000000,
+            "top_provider": {"max_completion_tokens": 128000},
+            "supported_parameters": ["structured_outputs"],
+        },
+        {
+            "id": "openai/gpt-5.6-terra",
+            "name": "GPT-5.6 Terra",
+            "pricing": {"prompt": "0.000002", "completion": "0.000012"},
+            "context_length": 1050000,
+            "top_provider": {"max_completion_tokens": 128000},
+            "supported_parameters": ["structured_outputs"],
+        },
+    ],
+    "decisions": [
+        {
+            "id": "typesafe/jev-1.13",
+            "name": "Jev 1.13",
+            "pricing": {"prompt": "0.000000042"},
+            "context_length": 32000,
+        }
+    ],
+    "embeddings": [
+        {
+            "id": "openai/text-embedding-3-large",
+            "name": "Embedding 3 Large",
+            "pricing": {"prompt": "0.00000013"},
+            "context_length": 8192,
+        }
+    ],
+}
+
+
+def _vector(text: str) -> list[float]:
+    return [float(len(text)), 1.0, float(sum(map(ord, text)) % 7)]
+
+
+class FakeOpenRouter:
+    def __init__(self, *, models_status: int = 200) -> None:
+        self.models_status = models_status
+        self.requests: list[httpx2.Request] = []
+
+    def __call__(self, request: httpx2.Request) -> httpx2.Response:
+        self.requests.append(request)
+        path = request.url.path
+        if path.endswith("/v1/models"):
+            return self._models(request)
+        body = json.loads(request.content)
+        if path.endswith("/alpha/decisions"):
+            usage = {"input_tokens": 100, "output_tokens": 10, "cost": 0.00001}
+            return httpx2.Response(
+                200, json={"model": "typesafe/jev-1.13", "answers": JEV_ANSWERS, "usage": usage}
+            )
+        if path.endswith("/v1/embeddings"):
+            data = [
+                {"index": i, "embedding": _vector(text)} for i, text in enumerate(body["input"])
+            ]
+            usage = {"prompt_tokens": 5 * len(data), "cost": 0.00001 * len(data)}
+            return httpx2.Response(200, json={"model": body["model"], "data": data, "usage": usage})
+        return self._chat(body)
+
+    def _models(self, request: httpx2.Request) -> httpx2.Response:
+        if self.models_status != 200:
+            return httpx2.Response(self.models_status, json={"error": {"message": "catalog down"}})
+        modality = request.url.params.get("output_modalities") or "text"
+        return httpx2.Response(200, json={"data": _CATALOG[modality]})
+
+    def _chat(self, body: dict[str, Any]) -> httpx2.Response:
+        if body["response_format"]["json_schema"]["name"] == "email_generation":
+            return httpx2.Response(200, json=chat_body(generator_output(), model=body["model"]))
+        if not body.get("stream"):
+            content = json.dumps(CHAT_ANSWER)
+            return httpx2.Response(200, json=chat_body(content, model=body["model"]))
+        items = body["response_format"]["json_schema"]["schema"]["properties"]["results"]["items"]
+        refs = items["properties"]["ref"]["enum"]
+        content = json.dumps({"results": [{"ref": ref, **CHAT_ANSWER} for ref in refs]})
+        headers = {"content-type": "text/event-stream"}
+        return httpx2.Response(
+            200, content=sse_body([content], model=body["model"]), headers=headers
+        )
+
+
+def seed_generation(
+    services: Services, *, emails: int = 2, generation_id: str = "20260924-100000-seed-abcd"
+) -> str:
+    meta = GenerationMeta(
+        id=generation_id,
+        name="seed",
+        created_at=datetime(2026, 9, 24, tzinfo=UTC),
+        status="completed",
+        requested=emails,
+        done=emails,
+        seed=1,
+        models=("gen/a",),
+        question_set=services.question_set(),
+        config=services.generation_config(),
+    )
+    services.generations.save(meta)
+    for index in range(1, emails + 1):
+        email = EmailFactory(id=f"{generation_id}.{index:04d}")
+        services.generations.append_email(generation_id, email)
+    return generation_id
