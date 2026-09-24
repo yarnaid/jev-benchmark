@@ -1,5 +1,7 @@
 """Shared pytest configuration and fixtures.
 
+Fixtures:
+    questions: a three-question set covering every question type.
 Hooks:
     pytest_collection_modifyitems: mark tests listed in tests/slow_tests.txt as `slow`.
 """
@@ -7,6 +9,8 @@ Hooks:
 from pathlib import Path
 
 import pytest
+
+from jev_bench.questions import ChoiceQuestion, NoulQuestion, QuestionSet, ScoreQuestion
 
 _SLOW_LIST = Path(__file__).with_name("slow_tests.txt")
 
@@ -23,3 +27,30 @@ def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
     for item in items:
         if item.nodeid in slow:
             item.add_marker(pytest.mark.slow)
+
+
+@pytest.fixture
+def questions() -> QuestionSet:
+    return QuestionSet(
+        name="mini",
+        questions=(
+            ChoiceQuestion(
+                type="choice",
+                id="category",
+                instructions="What kind of email?",
+                options={"spam": "Junk", "personal": "From a friend", "work": "From a colleague"},
+            ),
+            ScoreQuestion(
+                type="score",
+                id="urgency",
+                instructions="How urgent?",
+                options={"low": "Whenever", "today": "Within a day", "now": "Immediately"},
+            ),
+            NoulQuestion(
+                type="noul",
+                id="needs_reply",
+                instructions="Needs a reply?",
+                options={"yes": "Reply expected", "no": "No reply expected"},
+            ),
+        ),
+    )

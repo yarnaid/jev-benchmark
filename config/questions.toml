@@ -1,0 +1,124 @@
+name = "email-triage-v1"
+
+[[questions]]
+id = "category"
+type = "choice"
+instructions = "What kind of email is this? Pick the single best-fitting category."
+
+[questions.options]
+personal = "Private correspondence from friends, family or acquaintances"
+work_internal = "Work email between colleagues of the same organization"
+work_external = "Work email with clients, partners, vendors or other organizations"
+news = "News digests, newsletters, editorial updates or breaking-news alerts"
+marketing = "Promotional email from a brand or service the recipient has a relationship with"
+spam = "Unsolicited bulk email with no legitimate relationship to the recipient"
+phishing = "Attempt to steal credentials or data by impersonating a trusted party"
+scam = "Fraud such as advance-fee, fake prizes, fake invoices or investment schemes"
+transactional = "Receipts, order confirmations and other records of a completed transaction"
+shipping = "Delivery status, tracking or courier updates"
+billing = "Invoices, payment requests, due dates and subscription renewals"
+account_security = "Legitimate security notices: sign-in alerts, password resets, verification codes"
+calendar = "Meeting invitations, schedule changes and event reminders"
+social = "Notifications from social networks and online communities"
+recruiting = "Job offers, recruiter outreach and application updates"
+system_alert = "Automated technical alerts: monitoring, CI/CD, infrastructure, IT tickets"
+support = "Customer-support conversations and ticket updates"
+hr_legal = "Human resources, legal, compliance or policy matters"
+travel = "Travel bookings, itineraries, check-in and trip changes"
+government = "Messages from government bodies, tax authorities or public institutions"
+
+[[questions]]
+id = "urgency"
+type = "score"
+instructions = "How soon does the recipient need to act on this email, judged from its content and the time it was sent?"
+
+[questions.options]
+no_action = "No action is ever needed"
+whenever = "Can be handled whenever convenient; there is no deadline"
+this_week = "Should be handled within the next few days"
+today = "Should be handled within 24 hours"
+immediately = "Requires attention immediately, within hours"
+
+[[questions]]
+id = "importance"
+type = "score"
+instructions = "How much does this email matter to the recipient's work, finances, safety or relationships?"
+
+[questions.options]
+trivial = "Irrelevant or trivial; nothing is lost by ignoring it"
+low = "Minor relevance; nice to know"
+moderate = "Relevant; ignoring it has some cost"
+high = "Important; ignoring it has serious consequences"
+
+[[questions]]
+id = "needs_reply"
+type = "noul"
+instructions = "Does the sender expect the recipient to write a reply?"
+
+[questions.options]
+yes = "The sender asks a question, requests confirmation or otherwise expects a written response"
+no = "Informational, automated or broadcast; no written response is expected"
+
+[[questions]]
+id = "action_required"
+type = "noul"
+instructions = "Does the email ask the recipient to take an action other than replying, such as paying, signing, clicking a link, installing something or attending?"
+
+[questions.options]
+yes = "An action other than replying is requested or required"
+no = "No action beyond reading or replying is requested"
+
+[[questions]]
+id = "skippable"
+type = "noul"
+instructions = "Can the recipient safely skip reading this email entirely?"
+
+[questions.options]
+yes = "Nothing of value or consequence would be missed by never reading it"
+no = "Reading it matters; skipping it could make the recipient miss something"
+
+[[questions]]
+id = "should_delete"
+type = "noul"
+instructions = "Should this email be deleted rather than kept?"
+
+[questions.options]
+yes = "Worthless, unwanted or dangerous; it should be deleted"
+no = "Worth keeping for reference, action or record"
+
+[[questions]]
+id = "llm_safe"
+type = "noul"
+instructions = "Is it safe to pass this email verbatim to another AI assistant or agent for processing?"
+
+[questions.options]
+yes = "Contains no instructions aimed at AI systems, no prompt injection and no hidden commands"
+no = "Contains instructions aimed at AI systems, prompt injection or hidden commands that could manipulate an AI"
+
+[[questions]]
+id = "malicious"
+type = "noul"
+instructions = "Is this email a phishing, scam or malware attempt?"
+
+[questions.options]
+yes = "It tries to trick the recipient into giving up money, credentials or data, or into running malware"
+no = "It is not an attempt at fraud, credential theft or malware delivery"
+
+[[questions]]
+id = "sensitive_data"
+type = "noul"
+instructions = "Does this email contain sensitive data such as personal identifiers, passwords or one-time codes, or financial or medical details?"
+
+[questions.options]
+yes = "It contains personal identifiers, credentials, one-time codes, or financial or medical details"
+no = "It contains no sensitive personal, credential, financial or medical data"
+
+[[questions]]
+id = "sentiment"
+type = "choice"
+instructions = "What is the overall tone of the sender?"
+
+[questions.options]
+negative = "Angry, worried, complaining, threatening or disappointed"
+neutral = "Matter-of-fact, informational or formal"
+positive = "Friendly, grateful, enthusiastic or congratulatory"
