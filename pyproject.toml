@@ -26,6 +26,7 @@ build-backend = "uv_build"
 line-length = 100
 target-version = "py314"
 src = ["src", "tests"]
+extend-exclude = ["docs"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "UP", "ANN", "SIM", "RUF", "PT", "ASYNC", "S", "C4"]
@@ -41,7 +42,7 @@ include = ["src", "tests"]
 venvPath = "."
 venv = ".venv"
 executionEnvironments = [
-  { root = "tests", reportCallIssue = "none" },
+  { root = "tests/test_settings.py", reportCallIssue = "none" },
 ]
 
 [tool.pytest.ini_options]
