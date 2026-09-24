@@ -2,6 +2,7 @@
 
 from pathlib import Path
 
+from jev_bench.benchmark_config import load_benchmark_config
 from jev_bench.questions import load_question_set
 
 CONFIG_DIR = Path(__file__).resolve().parents[1] / "config"
@@ -30,3 +31,16 @@ def test_shipped_question_set() -> None:
     sentiment_ids = ("negative", "neutral", "positive")
     assert shipped.get("sentiment").option_ids == sentiment_ids
     assert [q.type for q in shipped.questions].count("noul") == 7
+
+
+def test_shipped_benchmark_config() -> None:
+    config = load_benchmark_config(CONFIG_DIR / "benchmark.toml")
+    assert [(c.id, c.kind, c.default_model) for c in config.columns] == [
+        ("jev", "decisions", "typesafe/jev-1.13"),
+        ("anthropic", "chat", "anthropic/claude-sonnet-5"),
+        ("openai", "chat", "openai/gpt-5.6-terra"),
+        ("embeddings", "embeddings", "openai/text-embedding-3-large"),
+    ]
+    assert config.column("anthropic").cache_system_prompt is True
+    assert config.column("openai").cache_system_prompt is False
+    assert config.embeddings.email_template.startswith("Sent: $sent_at")
