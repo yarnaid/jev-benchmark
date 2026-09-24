@@ -36,7 +36,7 @@ async function main() {
   const params = new URLSearchParams(location.search);
   const [generations, runs] = await Promise.all([api.generations(), api.runs()]);
   state.generations = generations.map((view) => view.meta);
-  state.runs = runs.map((view) => view.meta).filter((run) => run.status === "completed");
+  state.runs = runs.map((view) => view.meta).filter((run) => run.status !== "running");
   const requested = listParam(params, "generations");
   state.selectedGenerations = requested.length ? requested : state.generations.slice(0, 1).map((generation) => generation.id);
   state.selectedRuns = listParam(params, "runs");
