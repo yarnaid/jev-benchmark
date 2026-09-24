@@ -168,7 +168,7 @@ def _to_email(
         traits=dict(item.traits),
         reference_answers=output.answers,
     )
-    return email, count_mismatches(item, traits, output.answers)
+    return email, count_mismatches(item.traits, traits, output.answers)
 
 
 def _store_email(
@@ -235,15 +235,7 @@ def mark_interrupted_generations(
 def _recovered_totals(store: GenerationStore, meta: GenerationMeta) -> dict[str, object]:
     emails = store.emails(meta.id)
     traits = resolve_traits(meta.config, meta.question_set)
-    mismatches = sum(_mismatches_for_email(email, traits) for email in emails)
-    return {"status": "interrupted", "done": len(emails), "trait_mismatches": mismatches}
-
-
-def _mismatches_for_email(email: Email, traits: Sequence[ResolvedTrait]) -> int:
-    return sum(
-        1
-        for trait in traits
-        if trait.question
-        and trait.name in email.traits
-        and email.reference_answers.get(trait.question) != email.traits[trait.name]
+    mismatches = sum(
+        count_mismatches(email.traits, traits, email.reference_answers) for email in emails
     )
+    return {"status": "interrupted", "done": len(emails), "trait_mismatches": mismatches}

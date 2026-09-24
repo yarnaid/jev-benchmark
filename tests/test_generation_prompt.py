@@ -90,12 +90,16 @@ def test_parse_generator_output_rejects_invalid_json(questions: QuestionSet) -> 
 
 
 @pytest.mark.parametrize(
-    ("answers", "expected"),
+    ("requested", "answers", "expected"),
     [
-        pytest.param({"category": "spam"}, 0, id="consistent"),
-        pytest.param({"category": "work"}, 1, id="contradicts"),
-        pytest.param({}, 1, id="missing"),
+        pytest.param(_ITEM.traits, {"category": "spam"}, 0, id="consistent"),
+        pytest.param(_ITEM.traits, {"category": "work"}, 1, id="contradicts"),
+        pytest.param(_ITEM.traits, {}, 1, id="missing-answer"),
+        pytest.param({}, {"category": "work"}, 0, id="trait-not-requested"),
     ],
 )
-def test_count_mismatches(questions: QuestionSet, answers: dict[str, str], expected: int) -> None:
-    assert count_mismatches(_ITEM, resolve_traits(_CONFIG, questions), answers) == expected
+def test_count_mismatches(
+    questions: QuestionSet, requested: dict[str, str], answers: dict[str, str], expected: int
+) -> None:
+    traits = resolve_traits(_CONFIG, questions)
+    assert count_mismatches(requested, traits, answers) == expected

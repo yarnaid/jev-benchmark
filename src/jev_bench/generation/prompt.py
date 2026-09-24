@@ -7,7 +7,8 @@ Functions:
     render_prompts: (system, user) prompts for one plan item.
     generation_schema: strict JSON schema for `{email, answers}`.
     parse_generator_output: JSON text -> GeneratorOutput (answers checked against the options).
-    count_mismatches: question-linked traits that the generator's own answers contradict.
+    count_mismatches: question-linked traits that the generator's own answers contradict
+        (traits absent from `requested` are skipped).
 """
 
 from collections.abc import Mapping, Sequence
@@ -99,10 +100,12 @@ def parse_generator_output(content: str, questions: QuestionSet) -> GeneratorOut
 
 
 def count_mismatches(
-    item: PlanItem, traits: Sequence[ResolvedTrait], answers: Mapping[str, str]
+    requested: Mapping[str, str], traits: Sequence[ResolvedTrait], answers: Mapping[str, str]
 ) -> int:
     return sum(
         1
         for trait in traits
-        if trait.question and answers.get(trait.question) != item.traits[trait.name]
+        if trait.question
+        and trait.name in requested
+        and answers.get(trait.question) != requested[trait.name]
     )
