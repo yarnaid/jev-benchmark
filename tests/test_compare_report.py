@@ -2,53 +2,24 @@
 
 import json
 from collections.abc import Callable
+from datetime import UTC, datetime
 
 import pytest
 from pydantic import BaseModel
+from tests.compare_data import CATEGORY_A, IDS, build_answers, build_reference, build_run_a, rater
 from tests.factories import EmailFactory
 
-from jev_bench.compare.raters import Rater, RaterKind
+from jev_bench.benchmark_config import JevParams
+from jev_bench.compare.raters import Rater, reference_rater, run_rater
 from jev_bench.compare.report import ComparisonReport, compare
 from jev_bench.compare.rows import email_rows
-from jev_bench.questions import ChoiceQuestion, Distribution, QuestionSet
-
-_IDS = ["g.0001", "g.0002", "g.0003", "g.0004"]
-_CATEGORY_A = [
-    {"spam": 0.9, "personal": 0.05, "work": 0.05},
-    {"spam": 0.1, "personal": 0.8, "work": 0.1},
-    {"spam": 0.2, "personal": 0.2, "work": 0.6},
-    {"spam": 0.5, "personal": 0.3, "work": 0.2},
-]
-_URGENCY = [
-    {"low": 0.1, "today": 0.2, "now": 0.7},
-    {"low": 0.6, "today": 0.3, "now": 0.1},
-    {"low": 0.2, "today": 0.6, "now": 0.2},
-    {"low": 0.1, "today": 0.1, "now": 0.8},
-]
-_REPLY = [{"yes": p, "no": 1 - p} for p in (0.2, 0.9, 0.4, 0.7)]
-
-
-def _answers(category: list[Distribution]) -> dict[str, dict[str, Distribution]]:
-    return {
-        email_id: {"category": category[i], "urgency": _URGENCY[i], "needs_reply": _REPLY[i]}
-        for i, email_id in enumerate(_IDS)
-    }
-
-
-def _rater(
-    rater_id: str,
-    kind: RaterKind,
-    answers: dict[str, dict[str, Distribution]],
-    questions: QuestionSet,
-) -> Rater:
-    return Rater(
-        id=rater_id, label=rater_id.upper(), kind=kind, questions=questions, answers=answers
-    )
+from jev_bench.questions import ChoiceQuestion, QuestionSet
+from jev_bench.store.runs import Prediction, RunMeta
 
 
 @pytest.fixture
 def run_a(questions: QuestionSet) -> Rater:
-    return _rater("a", "run", _answers(_CATEGORY_A), questions)
+    return build_run_a(questions)
 
 
 def test_incompatible_rater_is_skipped_with_a_warning(questions: QuestionSet, run_a: Rater) -> None:
@@ -60,7 +31,7 @@ def test_incompatible_rater_is_skipped_with_a_warning(questions: QuestionSet, ru
             ),
         ),
     )
-    other = _rater("c", "run", {"g.0001": {"category": {"spam": 1.0, "ham": 0.0}}}, changed)
+    other = rater("c", "run", {"g.0001": {"category": {"spam": 1.0, "ham": 0.0}}}, changed)
     report = compare([run_a, other], questions, resamples=50)
     category = next(q for q in report.questions if q.id == "category")
     urgency = next(q for q in report.questions if q.id == "urgency")
@@ -73,9 +44,30 @@ def test_incompatible_rater_is_skipped_with_a_warning(questions: QuestionSet, ru
     )
 
 
+def test_group_statistics_per_question(questions: QuestionSet, run_a: Rater) -> None:
+    category_b = [*CATEGORY_A[:2], {"spam": 0.7, "personal": 0.1, "work": 0.2}, CATEGORY_A[3]]
+    run_b = rater("b", "run", build_answers(category_b), questions)
+    report = compare([run_a, run_b], questions, resamples=50)
+    category = next(q for q in report.questions if q.id == "category")
+    assert category.fleiss_kappa == pytest.approx(9 / 17)
+    stats_a = next(s for s in category.raters if s.rater == "a")
+    assert stats_a.argmax_counts == {"spam": 2, "personal": 1, "work": 1}
+    assert stats_a.mean_level is None
+    assert stats_a.mean_confidence == pytest.approx((0.9 + 0.8 + 0.6 + 0.5) / 4)
+    urgency = next(q for q in report.questions if q.id == "urgency")
+    assert urgency.raters[0].mean_level is not None
+
+
+def test_reference_rater_excluded_from_fleiss(questions: QuestionSet, run_a: Rater) -> None:
+    reference = build_reference(questions)
+    report = compare([run_a, reference], questions, resamples=50)
+    category = next(q for q in report.questions if q.id == "category")
+    assert category.fleiss_kappa is None
+
+
 def _no_overlap_report(questions: QuestionSet) -> ComparisonReport:
-    run_a = _rater("a", "run", _answers(_CATEGORY_A), questions)
-    lonely = _rater("z", "run", {"other.0001": _answers(_CATEGORY_A)["g.0001"]}, questions)
+    run_a = rater("a", "run", build_answers(CATEGORY_A), questions)
+    lonely = rater("z", "run", {"other.0001": build_answers(CATEGORY_A)["g.0001"]}, questions)
     return compare([run_a, lonely], questions, resamples=50)
 
 
@@ -85,9 +77,9 @@ def _check_no_overlap(report: ComparisonReport) -> None:
 
 
 def _single_shared_email_report(questions: QuestionSet) -> ComparisonReport:
-    shared = {"g.0001": _answers(_CATEGORY_A)["g.0001"]}
-    a = _rater("a", "run", shared, questions)
-    b = _rater("b", "run", shared, questions)
+    shared = {"g.0001": build_answers(CATEGORY_A)["g.0001"]}
+    a = rater("a", "run", shared, questions)
+    b = rater("b", "run", shared, questions)
     return compare([a, b], questions, resamples=20)
 
 
@@ -104,8 +96,8 @@ def _constant_score_and_noul_report(questions: QuestionSet) -> ComparisonReport:
         "urgency": {"low": 0.0, "today": 1.0, "now": 0.0},
         "needs_reply": {"yes": 0.0, "no": 1.0},
     }
-    answers = dict.fromkeys(_IDS, constant_answers)
-    raters = [_rater("a", "run", answers, questions), _rater("b", "run", answers, questions)]
+    answers = dict.fromkeys(IDS, constant_answers)
+    raters = [rater("a", "run", answers, questions), rater("b", "run", answers, questions)]
     return compare(raters, questions, resamples=20)
 
 
@@ -119,9 +111,9 @@ def _check_constant_score_and_noul(report: ComparisonReport) -> None:
 
 def _constant_choice_report(questions: QuestionSet) -> ComparisonReport:
     constant = {
-        email_id: {"category": {"spam": 1.0, "personal": 0.0, "work": 0.0}} for email_id in _IDS
+        email_id: {"category": {"spam": 1.0, "personal": 0.0, "work": 0.0}} for email_id in IDS
     }
-    raters = [_rater("a", "run", constant, questions), _rater("b", "run", constant, questions)]
+    raters = [rater("a", "run", constant, questions), rater("b", "run", constant, questions)]
     return compare(raters, questions, resamples=20)
 
 
@@ -162,11 +154,11 @@ def test_degenerate_inputs_are_finite_or_none(
 
 def test_argmax_tie_breaks_to_first_option(questions: QuestionSet) -> None:
     tie = {"g.0001": {"category": {"spam": 0.5, "personal": 0.5, "work": 0.0}}}
-    rater = _rater("a", "run", tie, questions)
-    report = compare([rater], questions, resamples=5)
+    a_rater = rater("a", "run", tie, questions)
+    report = compare([a_rater], questions, resamples=5)
     category = next(q for q in report.questions if q.id == "category")
     assert category.raters[0].argmax_counts == {"spam": 1, "personal": 0, "work": 0}
-    rows = email_rows([EmailFactory(id="g.0001")], [rater], {}, questions)
+    rows = email_rows([EmailFactory(id="g.0001")], [a_rater], {}, questions)
     assert rows[0].top == {"a": {"category": "spam"}}
 
 
@@ -184,7 +176,7 @@ def test_fleiss_excludes_run_with_no_answers_and_warns(questions: QuestionSet) -
     }
     two = (
         compare(
-            [_rater("a", "run", answers_a, questions), _rater("b", "run", answers_b, questions)],
+            [rater("a", "run", answers_a, questions), rater("b", "run", answers_b, questions)],
             questions,
             resamples=10,
         )
@@ -193,9 +185,9 @@ def test_fleiss_excludes_run_with_no_answers_and_warns(questions: QuestionSet) -
     )
     report = compare(
         [
-            _rater("a", "run", answers_a, questions),
-            _rater("b", "run", answers_b, questions),
-            _rater("dead", "run", {}, questions),
+            rater("a", "run", answers_a, questions),
+            rater("b", "run", answers_b, questions),
+            rater("dead", "run", {}, questions),
         ],
         questions,
         resamples=10,
@@ -203,4 +195,37 @@ def test_fleiss_excludes_run_with_no_answers_and_warns(questions: QuestionSet) -
     category = next(q for q in report.questions if q.id == "category")
     assert category.fleiss_kappa == pytest.approx(two)
     assert "dead" not in {stats.rater for stats in category.raters}
-    assert "rater dead answered no emails for question category" in report.warnings
+    assert (
+        "rater dead answered no emails for questions: category, urgency, needs_reply"
+        in report.warnings
+    )
+
+
+def test_rater_summary_carries_run_meta_and_item_count(questions: QuestionSet) -> None:
+    meta = RunMeta(
+        id="20260924-100000-jev-x-0001",
+        column="jev",
+        kind="decisions",
+        model="typesafe/jev-1.13",
+        generation_ids=("g",),
+        mode="per_email",
+        emails_per_request=1,
+        question_set=questions,
+        params=JevParams(),
+        concurrency=1,
+        created_at=datetime(2026, 9, 24, tzinfo=UTC),
+        n_emails=1,
+    )
+    predictions = [Prediction(email_id="g.0001", answers={"needs_reply": {"yes": 1.0, "no": 0.0}})]
+    run = run_rater(meta, predictions)
+    report = compare([run], questions, runs={meta.id: meta}, resamples=10)
+    assert report.raters[0].run == meta
+    assert report.raters[0].n_items == 1
+
+
+def test_reference_rater_warnings_are_merged_into_report(questions: QuestionSet) -> None:
+    email = EmailFactory(id="gen1.0001", reference_answers={"category": "spam"})
+    reference = reference_rater([email], questions, {})
+    report = compare([reference], questions, resamples=5)
+    assert reference.warnings
+    assert reference.warnings[0] in report.warnings

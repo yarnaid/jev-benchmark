@@ -9,7 +9,8 @@ Functions:
     run_label: display label of a run ("column · model · mode").
     run_rater: build a rater from a run's predictions, skipping failed or answerless emails.
     reference_rater: build a rater from generator reference answers, restricted per email to
-        its own generation's question-set snapshot.
+        its own generation's question-set snapshot, with one warning per generation whose
+        snapshot is missing or incompatible for some questions.
     human_rater: build a rater from raw human labels (None when none are usable).
 """
 
@@ -26,22 +27,27 @@ type RaterKind = Literal["run", "reference", "human"]
 type Column = dict[str, Distribution]
 
 
+def _supports(candidate: QuestionSet, question: AnyQuestion) -> bool:
+    try:
+        return compatible(candidate.get(question.id), question)
+    except KeyError:
+        return False
+
+
 class Rater(BaseModel):
     id: str
     label: str
     kind: RaterKind
     questions: QuestionSet
     answers: dict[str, dict[str, Distribution]]
+    warnings: tuple[str, ...] = ()
 
     @property
     def hard(self) -> bool:
         return self.kind != "run"
 
     def supports(self, question: AnyQuestion) -> bool:
-        try:
-            return compatible(self.questions.get(question.id), question)
-        except KeyError:
-            return False
+        return _supports(self.questions, question)
 
     def column(self, question_id: str) -> Column:
         return {
@@ -81,6 +87,34 @@ def reference_rater(
         kind="reference",
         questions=questions,
         answers=answers,
+        warnings=_reference_warnings(emails, questions, snapshots),
+    )
+
+
+def _reference_warnings(
+    emails: Sequence[Email], questions: QuestionSet, snapshots: Mapping[str, QuestionSet]
+) -> tuple[str, ...]:
+    generation_ids = dict.fromkeys(email.generation_id for email in emails)
+    return tuple(
+        warning
+        for generation_id in generation_ids
+        if (warning := _generation_warning(generation_id, questions, snapshots.get(generation_id)))
+    )
+
+
+def _generation_warning(
+    generation_id: str, questions: QuestionSet, snapshot: QuestionSet | None
+) -> str | None:
+    if snapshot is None:
+        skipped, reason = [q.id for q in questions.questions], "no snapshot for this generation"
+    else:
+        skipped = [q.id for q in questions.questions if not _supports(snapshot, q)]
+        reason = "incompatible snapshot"
+    if not skipped:
+        return None
+    return (
+        f"reference answers of generation {generation_id} skipped for questions: "
+        f"{', '.join(skipped)} ({reason})"
     )
 
 
@@ -109,12 +143,5 @@ def _reference_hard(
     return {
         question.id: one_hot(question, labels[question.id])
         for question in questions.questions
-        if labels.get(question.id) in question.options and _snapshot_supports(question, snapshot)
+        if labels.get(question.id) in question.options and _supports(snapshot, question)
     }
-
-
-def _snapshot_supports(question: AnyQuestion, snapshot: QuestionSet) -> bool:
-    try:
-        return compatible(snapshot.get(question.id), question)
-    except KeyError:
-        return False

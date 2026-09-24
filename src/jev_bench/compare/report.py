@@ -9,17 +9,24 @@ Functions:
     compare: full per-question report for a set of raters against a base question set.
 """
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from itertools import combinations
 from typing import Literal
 
 import numpy as np
 from pydantic import BaseModel
 
-from jev_bench.compare.pairs import PairStats, RaterMatrix, pair_stats, rater_matrix, slice_matrix
+from jev_bench.compare.pairs import (
+    PairStats,
+    RaterMatrix,
+    pair_stats,
+    rater_matrix,
+    resample_index_cache,
+    slice_matrix,
+)
 from jev_bench.compare.raters import Rater, RaterKind
 from jev_bench.metrics.agreement import fleiss_kappa
-from jev_bench.metrics.distributions import argmax_labels, entropy, expected_level
+from jev_bench.metrics.distributions import IntArray, argmax_labels, entropy, expected_level
 from jev_bench.questions import AnyQuestion, QuestionSet
 from jev_bench.store.runs import RunMeta
 
@@ -67,9 +74,15 @@ def compare(
     runs: Mapping[str, RunMeta] | None = None,
 ) -> ComparisonReport:
     warnings: list[str] = []
+    index_for = resample_index_cache(resamples, seed)
+    fleiss_gaps: dict[str, list[str]] = {}
     questions = [
-        _question_report(question, raters, resamples, seed, warnings) for question in base.questions
+        _question_report(question, raters, index_for, warnings, fleiss_gaps)
+        for question in base.questions
     ]
+    warnings.extend(_fleiss_gap_warning(rater_id, ids) for rater_id, ids in fleiss_gaps.items())
+    for rater in raters:
+        warnings.extend(rater.warnings)
     metas = runs or {}
     summaries = [
         RaterSummary(
@@ -85,7 +98,11 @@ def compare(
 
 
 def _question_report(
-    question: AnyQuestion, raters: Sequence[Rater], resamples: int, seed: int, warnings: list[str]
+    question: AnyQuestion,
+    raters: Sequence[Rater],
+    index_for: Callable[[int], IntArray],
+    warnings: list[str],
+    fleiss_gaps: dict[str, list[str]],
 ) -> QuestionReport:
     usable = [rater for rater in raters if rater.supports(question)]
     skipped = [rater.id for rater in raters if not rater.supports(question)]
@@ -99,7 +116,7 @@ def _question_report(
     pairs = [
         pair
         for left, right in combinations(usable, 2)
-        if (pair := pair_stats(left, right, matrices, question, resamples, seed)) is not None
+        if (pair := pair_stats(left, right, matrices, question, index_for)) is not None
     ]
     return QuestionReport(
         id=question.id,
@@ -112,7 +129,7 @@ def _question_report(
         ],
         pairs=pairs,
         fleiss_kappa=_fleiss(
-            [rater for rater in usable if rater.kind == "run"], matrices, question, warnings
+            [rater for rater in usable if rater.kind == "run"], matrices, question, fleiss_gaps
         ),
         skipped=skipped,
     )
@@ -123,6 +140,10 @@ def _skip_warning(question: AnyQuestion, skipped: Sequence[str]) -> str:
         f"{question.id}: incompatible snapshot (missing question, different type or options): "
         f"{', '.join(skipped)}"
     )
+
+
+def _fleiss_gap_warning(rater_id: str, question_ids: Sequence[str]) -> str:
+    return f"rater {rater_id} answered no emails for questions: {', '.join(question_ids)}"
 
 
 def _rater_stats(rater_id: str, rm: RaterMatrix, question: AnyQuestion) -> RaterStats:
@@ -146,11 +167,11 @@ def _fleiss(
     runs: Sequence[Rater],
     matrices: dict[str, RaterMatrix],
     question: AnyQuestion,
-    warnings: list[str],
+    fleiss_gaps: dict[str, list[str]],
 ) -> float | None:
     for rater in runs:
         if rater.id not in matrices:
-            warnings.append(f"rater {rater.id} answered no emails for question {question.id}")
+            fleiss_gaps.setdefault(rater.id, []).append(question.id)
     answered = [rater for rater in runs if rater.id in matrices]
     if len(answered) < 2:
         return None

@@ -1,12 +1,13 @@
 """Tests for jev_bench.compare.raters."""
 
+from collections.abc import Callable
 from datetime import UTC, datetime
 
+import pytest
 from tests.factories import EmailFactory
 
 from jev_bench.benchmark_config import JevParams
 from jev_bench.compare.raters import human_rater, reference_rater, run_rater
-from jev_bench.compare.report import compare
 from jev_bench.questions import ChoiceQuestion, QuestionSet
 from jev_bench.store.runs import Prediction, RunMeta
 
@@ -46,9 +47,6 @@ def test_run_rater_skips_failed_predictions(questions: QuestionSet) -> None:
     assert (rater.id, rater.kind, rater.hard) == (meta.id, "run", False)
     assert rater.label == "jev · typesafe/jev-1.13 · per_email"
     assert list(rater.answers) == ["g.0001"]
-    report = compare([rater], questions, runs={meta.id: meta}, resamples=10)
-    assert report.raters[0].run == meta
-    assert report.raters[0].n_items == 1
 
 
 def test_reference_rater_respects_generation_snapshot(questions: QuestionSet) -> None:
@@ -72,3 +70,50 @@ def test_reference_rater_respects_generation_snapshot(questions: QuestionSet) ->
     assert compatible_snapshot.answers == {
         "gen1.0001": {"category": {"spam": 1.0, "personal": 0.0, "work": 0.0}}
     }
+
+
+def _missing_snapshot(questions: QuestionSet) -> tuple[dict[str, QuestionSet], tuple[str, ...]]:
+    return {}, (
+        "reference answers of generation gen1 skipped for questions: "
+        "category, urgency, needs_reply (no snapshot for this generation)",
+    )
+
+
+def _incompatible_snapshot(
+    questions: QuestionSet,
+) -> tuple[dict[str, QuestionSet], tuple[str, ...]]:
+    narrower = QuestionSet(
+        name="narrower",
+        questions=(
+            ChoiceQuestion(
+                type="choice", id="category", instructions="?", options={"spam": "s", "work": "w"}
+            ),
+            *(question for question in questions.questions if question.id != "category"),
+        ),
+    )
+    return {"gen1": narrower}, (
+        "reference answers of generation gen1 skipped for questions: "
+        "category (incompatible snapshot)",
+    )
+
+
+def _compatible_snapshot(questions: QuestionSet) -> tuple[dict[str, QuestionSet], tuple[str, ...]]:
+    return {"gen1": questions}, ()
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        pytest.param(_missing_snapshot, id="missing-snapshot"),
+        pytest.param(_incompatible_snapshot, id="incompatible-snapshot"),
+        pytest.param(_compatible_snapshot, id="compatible-snapshot"),
+    ],
+)
+def test_reference_rater_warns_on_snapshot_gaps(
+    questions: QuestionSet,
+    case: Callable[[QuestionSet], tuple[dict[str, QuestionSet], tuple[str, ...]]],
+) -> None:
+    snapshots, expected_warnings = case(questions)
+    email = EmailFactory(id="gen1.0001", reference_answers={"category": "spam"})
+    rater = reference_rater([email], questions, snapshots)
+    assert rater.warnings == expected_warnings

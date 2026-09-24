@@ -8,8 +8,11 @@ Functions:
     rater_matrix: build a RaterMatrix from a rater's column for one question.
     slice_matrix: the sub-matrix of a RaterMatrix for a given list of email ids.
     pair_stats: full PairStats for two raters on one question (None without shared emails).
+    resample_index_cache: a bounded, per-call memoized resample_index(n), released with its
+        caller so bootstrap indices are never retained across compare() calls.
 """
 
+from collections.abc import Callable
 from functools import lru_cache
 from typing import NamedTuple
 
@@ -71,8 +74,7 @@ def pair_stats(
     right: Rater,
     matrices: dict[str, RaterMatrix],
     question: AnyQuestion,
-    resamples: int,
-    seed: int,
+    index_for: Callable[[int], IntArray],
 ) -> PairStats | None:
     left_rm, right_rm = matrices.get(left.id), matrices.get(right.id)
     if left_rm is None or right_rm is None:
@@ -82,15 +84,18 @@ def pair_stats(
         return None
     left_matrix = slice_matrix(left_rm, shared)
     right_matrix = slice_matrix(right_rm, shared)
-    index = _cached_resample_index(len(shared), resamples, seed)
+    index = index_for(len(shared))
     return _pair_from_matrices(left, right, left_matrix, right_matrix, question, index)
 
 
-@lru_cache(maxsize=128)
-def _cached_resample_index(n: int, resamples: int, seed: int) -> IntArray:
-    index = resample_index(n, resamples=resamples, seed=seed)
-    index.flags.writeable = False
-    return index
+def resample_index_cache(resamples: int, seed: int) -> Callable[[int], IntArray]:
+    @lru_cache(maxsize=4)
+    def index_for(n: int) -> IntArray:
+        index = resample_index(n, resamples=resamples, seed=seed)
+        index.flags.writeable = False
+        return index
+
+    return index_for
 
 
 def _pair_from_matrices(

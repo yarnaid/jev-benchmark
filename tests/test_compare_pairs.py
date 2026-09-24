@@ -1,76 +1,53 @@
 """Tests for jev_bench.compare.pairs."""
 
 import pytest
-from tests.factories import EmailFactory
+from tests.compare_data import (
+    CATEGORY_A,
+    IDS,
+    build_answers,
+    build_reference,
+    build_run_a,
+    build_run_b,
+    rater,
+)
 
-from jev_bench.compare.raters import Rater, RaterKind, reference_rater
-from jev_bench.compare.report import compare
-from jev_bench.questions import Distribution, QuestionSet
-
-_IDS = ["g.0001", "g.0002", "g.0003", "g.0004"]
-_CATEGORY_A = [
-    {"spam": 0.9, "personal": 0.05, "work": 0.05},
-    {"spam": 0.1, "personal": 0.8, "work": 0.1},
-    {"spam": 0.2, "personal": 0.2, "work": 0.6},
-    {"spam": 0.5, "personal": 0.3, "work": 0.2},
-]
-_URGENCY = [
-    {"low": 0.1, "today": 0.2, "now": 0.7},
-    {"low": 0.6, "today": 0.3, "now": 0.1},
-    {"low": 0.2, "today": 0.6, "now": 0.2},
-    {"low": 0.1, "today": 0.1, "now": 0.8},
-]
-_REPLY = [{"yes": p, "no": 1 - p} for p in (0.2, 0.9, 0.4, 0.7)]
-
-
-def _answers(category: list[Distribution]) -> dict[str, dict[str, Distribution]]:
-    return {
-        email_id: {"category": category[i], "urgency": _URGENCY[i], "needs_reply": _REPLY[i]}
-        for i, email_id in enumerate(_IDS)
-    }
-
-
-def _rater(
-    rater_id: str,
-    kind: RaterKind,
-    answers: dict[str, dict[str, Distribution]],
-    questions: QuestionSet,
-) -> Rater:
-    return Rater(
-        id=rater_id, label=rater_id.upper(), kind=kind, questions=questions, answers=answers
-    )
+from jev_bench.compare.pairs import (
+    RaterMatrix,
+    pair_stats,
+    rater_matrix,
+    resample_index_cache,
+    slice_matrix,
+)
+from jev_bench.compare.raters import Rater
+from jev_bench.questions import AnyQuestion, QuestionSet
 
 
 @pytest.fixture
 def run_a(questions: QuestionSet) -> Rater:
-    return _rater("a", "run", _answers(_CATEGORY_A), questions)
+    return build_run_a(questions)
 
 
 @pytest.fixture
 def run_b(questions: QuestionSet) -> Rater:
-    category = [*_CATEGORY_A[:2], {"spam": 0.7, "personal": 0.1, "work": 0.2}, _CATEGORY_A[3]]
-    return _rater("b", "run", _answers(category), questions)
+    return build_run_b(questions)
 
 
 @pytest.fixture
 def reference(questions: QuestionSet) -> Rater:
-    labels = ["spam", "personal", "work", "personal"]
-    emails = [
-        EmailFactory(
-            id=email_id,
-            reference_answers={"category": label, "urgency": "now", "needs_reply": "no"},
-        )
-        for email_id, label in zip(_IDS, labels, strict=True)
-    ]
-    return reference_rater(emails, questions, {"g": questions})
+    return build_reference(questions)
 
 
-def test_category_pair_and_group_statistics(
-    questions: QuestionSet, run_a: Rater, run_b: Rater
-) -> None:
-    report = compare([run_a, run_b], questions, resamples=50)
-    category = next(q for q in report.questions if q.id == "category")
-    pair = category.pairs[0]
+def _matrices(raters: list[Rater], question: AnyQuestion) -> dict[str, RaterMatrix]:
+    return {
+        r.id: rater_matrix(column, question) for r in raters if (column := r.column(question.id))
+    }
+
+
+def test_category_pair_statistics(questions: QuestionSet, run_a: Rater, run_b: Rater) -> None:
+    question = questions.get("category")
+    index_for = resample_index_cache(resamples=50, seed=0)
+    pair = pair_stats(run_a, run_b, _matrices([run_a, run_b], question), question, index_for)
+    assert pair is not None
     assert (pair.a, pair.b, pair.n) == ("a", "b", 4)
     assert pair.agreement == 0.75
     assert pair.kappa == pytest.approx(5 / 9)
@@ -79,35 +56,46 @@ def test_category_pair_and_group_statistics(
     assert pair.jsd > 0
     assert pair.agreement_ci is not None
     assert 0.0 <= pair.agreement_ci[0] <= pair.agreement_ci[1] <= 1.0
-    assert category.fleiss_kappa == pytest.approx(9 / 17)
-    stats_a = next(s for s in category.raters if s.rater == "a")
-    assert stats_a.argmax_counts == {"spam": 2, "personal": 1, "work": 1}
-    assert stats_a.mean_level is None
-    assert stats_a.mean_confidence == pytest.approx((0.9 + 0.8 + 0.6 + 0.5) / 4)
 
 
 def test_identical_questions_agree_perfectly(
     questions: QuestionSet, run_a: Rater, run_b: Rater
 ) -> None:
-    report = compare([run_a, run_b], questions, resamples=50)
-    reply = next(q for q in report.questions if q.id == "needs_reply").pairs[0]
-    urgency_question = next(q for q in report.questions if q.id == "urgency")
+    index_for = resample_index_cache(resamples=50, seed=0)
+    reply_q = questions.get("needs_reply")
+    reply = pair_stats(run_a, run_b, _matrices([run_a, run_b], reply_q), reply_q, index_for)
+    assert reply is not None
     assert (reply.agreement, reply.jsd) == (1.0, 0.0)
     assert reply.pearson == pytest.approx(1.0)
-    assert urgency_question.pairs[0].kappa == pytest.approx(1.0)
-    assert urgency_question.raters[0].mean_level is not None
+    urgency_q = questions.get("urgency")
+    urgency = pair_stats(run_a, run_b, _matrices([run_a, run_b], urgency_q), urgency_q, index_for)
+    assert urgency is not None
+    assert urgency.kappa == pytest.approx(1.0)
 
 
-def test_reference_rater_adds_brier_and_is_excluded_from_fleiss(
-    questions: QuestionSet, run_a: Rater, reference: Rater
-) -> None:
-    report = compare([run_a, reference], questions, resamples=50)
-    category = next(q for q in report.questions if q.id == "category")
-    pair = category.pairs[0]
+def test_reference_rater_adds_brier(questions: QuestionSet, run_a: Rater, reference: Rater) -> None:
+    question = questions.get("category")
+    index_for = resample_index_cache(resamples=50, seed=0)
+    matrices = _matrices([run_a, reference], question)
+    pair = pair_stats(run_a, reference, matrices, question, index_for)
+    assert pair is not None
     assert pair.agreement == 0.75
     assert pair.brier is not None
     assert 0.0 <= pair.brier <= 2.0
-    assert category.fleiss_kappa is None
+
+
+def test_brier_is_orientation_independent(
+    questions: QuestionSet, run_a: Rater, reference: Rater
+) -> None:
+    question = questions.get("category")
+    index_for = resample_index_cache(resamples=10, seed=0)
+    matrices = _matrices([run_a, reference], question)
+    forward = pair_stats(run_a, reference, matrices, question, index_for)
+    backward = pair_stats(reference, run_a, matrices, question, index_for)
+    assert forward is not None
+    assert backward is not None
+    assert forward.brier == pytest.approx(0.27375)
+    assert backward.brier == pytest.approx(0.27375)
 
 
 def test_quadratic_kappa_matches_reference_computation(questions: QuestionSet) -> None:
@@ -122,18 +110,80 @@ def test_quadratic_kappa_matches_reference_computation(questions: QuestionSet) -
         email_id: {"urgency": {k: float(k == lab) for k in ("low", "today", "now")}}
         for email_id, lab in zip(ids, labels_b, strict=True)
     }
-    raters = [_rater("a", "run", answers_a, questions), _rater("b", "run", answers_b, questions)]
-    report = compare(raters, questions, resamples=10)
-    urgency = next(q for q in report.questions if q.id == "urgency")
-    assert urgency.pairs[0].kappa == pytest.approx(0.75)
+    a, b = rater("a", "run", answers_a, questions), rater("b", "run", answers_b, questions)
+    question = questions.get("urgency")
+    index_for = resample_index_cache(resamples=10, seed=0)
+    pair = pair_stats(a, b, _matrices([a, b], question), question, index_for)
+    assert pair is not None
+    assert pair.kappa == pytest.approx(0.75)
 
 
-def test_brier_is_orientation_independent(
-    questions: QuestionSet, run_a: Rater, reference: Rater
+def test_pearson_none_for_constant_score_and_noul(questions: QuestionSet) -> None:
+    constant_answers = {
+        "urgency": {"low": 0.0, "today": 1.0, "now": 0.0},
+        "needs_reply": {"yes": 0.0, "no": 1.0},
+    }
+    answers = dict.fromkeys(IDS, constant_answers)
+    a, b = rater("a", "run", answers, questions), rater("b", "run", answers, questions)
+    index_for = resample_index_cache(resamples=10, seed=0)
+    for question_id in ("urgency", "needs_reply"):
+        question = questions.get(question_id)
+        pair = pair_stats(a, b, _matrices([a, b], question), question, index_for)
+        assert pair is not None
+        assert pair.pearson is None
+
+
+def test_pair_stats_returns_none_without_shared_emails(
+    questions: QuestionSet, run_a: Rater
 ) -> None:
-    forward = compare([run_a, reference], questions, resamples=10)
-    backward = compare([reference, run_a], questions, resamples=10)
-    forward_brier = next(q for q in forward.questions if q.id == "category").pairs[0].brier
-    backward_brier = next(q for q in backward.questions if q.id == "category").pairs[0].brier
-    assert forward_brier == pytest.approx(0.27375)
-    assert backward_brier == pytest.approx(0.27375)
+    lonely = rater("z", "run", {"other.0001": build_answers(CATEGORY_A)["g.0001"]}, questions)
+    question = questions.get("category")
+    index_for = resample_index_cache(resamples=10, seed=0)
+    matrices = _matrices([run_a, lonely], question)
+    assert pair_stats(run_a, lonely, matrices, question, index_for) is None
+
+
+def test_pair_stats_single_shared_email_has_undefined_kappa(questions: QuestionSet) -> None:
+    shared = {"g.0001": build_answers(CATEGORY_A)["g.0001"]}
+    a, b = rater("a", "run", shared, questions), rater("b", "run", shared, questions)
+    question = questions.get("category")
+    index_for = resample_index_cache(resamples=20, seed=0)
+    pair = pair_stats(a, b, _matrices([a, b], question), question, index_for)
+    assert pair is not None
+    assert pair.n == 1
+    assert pair.agreement == 1.0
+    assert pair.kappa is None
+    assert pair.kappa_ci is None
+
+
+def test_rater_matrix_builds_sorted_positions_and_matrix(questions: QuestionSet) -> None:
+    question = questions.get("category")
+    column = {
+        "g.0002": {"spam": 0.0, "personal": 1.0, "work": 0.0},
+        "g.0001": {"spam": 1.0, "personal": 0.0, "work": 0.0},
+    }
+    rm = rater_matrix(column, question)
+    assert rm.positions == {"g.0001": 0, "g.0002": 1}
+    assert rm.matrix.tolist() == [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]]
+
+
+def test_slice_matrix_selects_rows_by_email_id(questions: QuestionSet) -> None:
+    question = questions.get("category")
+    column = {email_id: dist["category"] for email_id, dist in build_answers(CATEGORY_A).items()}
+    rm = rater_matrix(column, question)
+    sliced = slice_matrix(rm, ["g.0003", "g.0001"])
+    assert sliced.tolist() == [
+        list(CATEGORY_A[2].values()),
+        list(CATEGORY_A[0].values()),
+    ]
+
+
+def test_resample_index_cache_is_bounded_read_only_and_deterministic() -> None:
+    index_for = resample_index_cache(resamples=10, seed=0)
+    first = index_for(5)
+    assert not first.flags.writeable
+    assert index_for(5) is first
+    for n in (6, 7, 8, 9, 5):
+        evicted = index_for(n)
+        assert evicted.shape == (10, n)
+    assert index_for(5).tolist() == resample_index_cache(resamples=10, seed=0)(5).tolist()
