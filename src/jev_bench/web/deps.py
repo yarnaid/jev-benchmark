@@ -7,6 +7,7 @@ Types:
 Functions:
     get_services: Services stored on the app by the lifespan.
     require_api_key: server key, else the X-OpenRouter-Key header, else HTTP 400.
+    split_ids: comma-separated id list, trimmed, de-duplicated, order kept.
 """
 
 from typing import Annotated
@@ -38,3 +39,8 @@ def require_api_key(
 
 
 ApiKeyDep = Annotated[str, Depends(require_api_key)]
+
+
+def split_ids(value: str | None) -> list[str]:
+    parts = (part.strip() for part in (value or "").split(","))
+    return list(dict.fromkeys(part for part in parts if part))

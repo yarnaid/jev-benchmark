@@ -13,6 +13,7 @@ Functions:
     generator_output: JSON text of one generator response.
     seed_generation: save a completed GenerationMeta plus its emails to services.generations.
     services_of: typed access to a TestClient's app.state.services.
+    poll: GET a path repeatedly until a predicate on its JSON body holds, or fail.
 Constants:
     MINI_QUESTIONS_TOML, MINI_BENCHMARK_TOML, MINI_GENERATION_TOML: mini config file contents.
 Types:
@@ -22,6 +23,7 @@ Types:
 """
 
 import json
+import time
 from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
@@ -366,3 +368,19 @@ def seed_generation(
         email = EmailFactory(id=f"{generation_id}.{index:04d}")
         services.generations.append_email(generation_id, email)
     return generation_id
+
+
+def poll(
+    client: TestClient,
+    path: str,
+    *,
+    until: Callable[[dict[str, Any]], bool],
+    attempts: int = 100,
+    delay_s: float = 0.002,
+) -> dict[str, Any]:
+    for _ in range(attempts):
+        body = client.get(path).json()
+        if until(body):
+            return body
+        time.sleep(delay_s)
+    raise AssertionError(f"{path} never satisfied the condition")

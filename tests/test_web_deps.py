@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from tests.factories import ServicesFactory
 
-from jev_bench.web.deps import NO_KEY_DETAIL, ApiKeyDep
+from jev_bench.web.deps import NO_KEY_DETAIL, ApiKeyDep, split_ids
 
 
 def _unused(request: httpx2.Request) -> httpx2.Response:
@@ -41,3 +41,15 @@ async def test_require_api_key(
     assert response.status_code == status
     body = response.json()
     assert (body.get("key") or body.get("detail")) == expected
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        pytest.param(None, [], id="none"),
+        pytest.param("", [], id="empty"),
+        pytest.param(" a, b ,,a ", ["a", "b"], id="trim-dedupe"),
+    ],
+)
+def test_split_ids(value: str | None, expected: list[str]) -> None:
+    assert split_ids(value) == expected
