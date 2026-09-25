@@ -49,6 +49,8 @@ node --test tests/js/                           # JS unit tests (Node's runner, 
     contiguous split), runs them under a semaphore, and appends predictions and responses.
 - **Generation** (`generation/`): a seeded trait plan (`plan.py`), then prompts and strict schema
   (`prompt.py`), then the job (`generator.py`). The generator's own answers become `reference_answers`.
+  Unusable output (empty, not JSON, schema-invalid) is retried with the same model up to `max_attempts`
+  (`config/generation.toml`); text around the JSON object is ignored; provider errors are not retried there.
 - **Persistence**: JSON/JSONL under `data/` (`store/`). `data/embeddings/` is a gitignored per-model vector
   cache keyed by sha256 of the exact input text.
   - Each `EmbeddingCache` loads its vectors once per process (`EmbeddingCache._load`), so a CLI run and a

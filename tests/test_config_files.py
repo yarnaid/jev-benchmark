@@ -60,6 +60,7 @@ def test_shipped_generation_config() -> None:
         "z-ai/glm-5.3",
     )
     assert config.models == expected_models
+    assert config.max_attempts == 3
     expected_traits = ["category", "urgency", "length", "prompt_injection"]
     assert [trait.name for trait in traits] == expected_traits
     now = datetime(2026, 9, 24, tzinfo=UTC)

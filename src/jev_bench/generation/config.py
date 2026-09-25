@@ -3,7 +3,8 @@
 Classes:
     TraitValue: one weighted trait value with its prompt text.
     Trait: a dataset knob, either linked to a question's options or with explicit values.
-    GenerationConfig: the whole file (templates validated against the declared traits).
+    GenerationConfig: the whole file (templates validated against the declared traits;
+        `max_attempts` bounds tries per email when the generator's output is unusable).
 Functions:
     load_generation_config: parse and validate the TOML file.
 """
@@ -50,6 +51,7 @@ class GenerationConfig(_Frozen):
     models: tuple[str, ...] = Field(min_length=1)
     temperature: float = Field(default=1.0, ge=0)
     concurrency: int = Field(default=8, ge=1)
+    max_attempts: int = Field(default=3, ge=1, le=10)
     sent_at_window_days: int = Field(default=30, ge=1)
     system_prompt: str
     user_prompt: str

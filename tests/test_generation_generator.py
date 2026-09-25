@@ -127,22 +127,35 @@ async def test_generation_persists_emails_and_totals(
 
 
 @pytest.mark.parametrize(
-    ("server", "errors"),
+    ("server", "errors", "models"),
     [
         pytest.param(
             GeneratorServer(
                 failures={2: httpx2.Response(500, json={"error": {"message": "boom"}})}
             ),
             1,
-            id="http-500",
+            ["gen/a", "gen/a", "gen/b"],
+            id="provider-error-is-not-retried",
         ),
-        pytest.param(GeneratorServer(content='{"email": {}}'), 3, id="invalid-output"),
+        pytest.param(
+            GeneratorServer(content='{"email": {}}'),
+            3,
+            ["gen/a"] * 6 + ["gen/b"] * 3,
+            id="invalid-output-fails-every-attempt",
+        ),
         pytest.param(
             GeneratorServer(
                 failures={1: httpx2.Response(200, json=chat_body("{}", finish_reason="length"))}
             ),
-            1,
-            id="truncated",
+            0,
+            ["gen/a", "gen/a", "gen/a", "gen/b"],
+            id="truncated-output-is-retried",
+        ),
+        pytest.param(
+            GeneratorServer(failures={1: httpx2.Response(200, json=chat_body(""))}),
+            0,
+            ["gen/a", "gen/a", "gen/a", "gen/b"],
+            id="empty-output-is-retried",
         ),
     ],
 )
@@ -152,11 +165,44 @@ async def test_item_failures_do_not_stop_the_generation(
     questions: QuestionSet,
     server: GeneratorServer,
     errors: int,
+    models: list[str],
 ) -> None:
     final, store = await _generate(tmp_path, make_client(server), questions, _plan(questions))
     assert final.status == "completed"
     assert final.errors == errors
     assert len(store.emails(_GEN_ID)) == 3 - errors
+    assert sorted(body["model"] for body in server.bodies) == models
+
+
+@pytest.mark.parametrize(
+    ("content", "detail"),
+    [
+        pytest.param("{}", "invalid output (2 errors: email, answers)", id="missing-fields"),
+        pytest.param("not json at all", "output is not valid JSON", id="not-json"),
+        pytest.param("", "empty response", id="empty"),
+        pytest.param('{"email": {}}', ", …)", id="many-errors-truncated"),
+    ],
+)
+async def test_item_failures_log_one_line_with_item_and_model(
+    tmp_path: Path,
+    make_client: ClientFactory,
+    questions: QuestionSet,
+    log_records: list[Any],
+    content: str,
+    detail: str,
+) -> None:
+    server = GeneratorServer(
+        failures={call: httpx2.Response(200, json=chat_body(content)) for call in (1, 2, 3)}
+    )
+    await _generate(tmp_path, make_client(server), questions, _plan(questions, count=1))
+    messages = [record.record["message"] for record in log_records]
+    assert [message.split(": ", 1)[0] for message in messages] == [
+        "item 1 (gen/a) attempt 1/3 failed, retrying",
+        "item 1 (gen/a) attempt 2/3 failed, retrying",
+        "item 1 (gen/a) failed after 3 attempts",
+    ]
+    assert all(detail in message for message in messages)
+    assert not any("\n" in message for message in messages)
 
 
 async def test_fatal_error_fails_the_generation(

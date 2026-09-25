@@ -1,6 +1,7 @@
 models = ["google/gemini-3.8-flash", "deepseek/deepseek-v4.1-flash", "z-ai/glm-5.3"]
 temperature = 1.0
 concurrency = 8
+max_attempts = 3
 sent_at_window_days = 30
 
 system_prompt = """

@@ -36,6 +36,7 @@ def test_valid_config() -> None:
     assert config.temperature == 1.0
     assert config.concurrency == 8
     assert config.sent_at_window_days == 30
+    assert config.max_attempts == 3
     assert config.traits[0].question == "category"
     assert config.traits[1].values["long"].weight == 1.0
 
@@ -79,6 +80,8 @@ def test_valid_config() -> None:
             _doc(traits=[{"name": "Bad-Name", "question": "q"}], user_prompt="x"),
             id="bad-trait-name",
         ),
+        pytest.param(_doc(max_attempts=0), id="zero-attempts"),
+        pytest.param(_doc(max_attempts=11), id="too-many-attempts"),
     ],
 )
 def test_invalid_configs(doc: dict[str, Any]) -> None:
