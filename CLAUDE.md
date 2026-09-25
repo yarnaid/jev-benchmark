@@ -44,7 +44,10 @@ node --test tests/js/                           # JS unit tests (Node's runner, 
 - **Columns** (`config/benchmark.toml` → `benchmark_config.py`) are `decisions` / `chat` / `embeddings`.
   - Each kind has a classifier implementing the `Classifier` protocol (`classifiers/base.py`): `prepare()`
     once, then `classify(batch)` per request.
-  - `run_launcher.py` validates a request and builds the classifier.
+  - `run_launcher.py` validates a request and builds the classifier. Chat parameters missing from the
+    model's catalog `supported_parameters` (`temperature` on Claude Sonnet 5 and GPT-5.6 Terra) are not
+    sent, because `provider.require_parameters` would otherwise 404; the run snapshot records them as
+    `null`.
   - `runner.py` plans requests under the token budget (`tokens.py` + `request_plan.py`: minimal equal
     contiguous split), runs them under a semaphore, and appends predictions and responses.
 - **Generation** (`generation/`): a seeded trait plan (`plan.py`), then prompts and strict schema
@@ -99,7 +102,8 @@ node --test tests/js/                           # JS unit tests (Node's runner, 
 - `classifiers/*` and `GeneratorDeps` hold the key as `SecretStr`, never a plain `str` field.
 - Every entry point (`cli.py`, `web/app.py`) calls `log_setup.configure_logging()` first, which runs with
   `diagnose=False` so a traceback can't leak a key from a local variable.
-- A provider refusal (401/402/403) logs the message without a traceback.
+- A provider refusal (401/402/403) or a 404 (unknown model / no provider for the requested parameters)
+  aborts the job and logs the message without a traceback.
 - `cli.py` pins Typer's `pretty_exceptions_show_locals=False`, so an uncaught exception's pretty
   traceback can't print a local variable holding a key.
 

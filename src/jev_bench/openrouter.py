@@ -1,7 +1,9 @@
 """Async OpenRouter client: JSON/SSE-stream POSTs, GETs, retries with jittered backoff, errors.
 
 Constants:
-    CHAT_PATH, FATAL_STATUSES, RETRY_STATUSES
+    CHAT_PATH, RETRY_STATUSES
+    FATAL_STATUSES: abort the whole job: 401/402/403 (key or credits) and 404 (unknown model, or
+        no provider can serve the requested parameters; every request would fail the same way).
 Classes:
     OpenRouterError: HTTP / protocol failure with `status`, `retryable` and `fatal`.
     ChatContentError: a chat completion carries no usable assistant content.
@@ -45,7 +47,7 @@ type JsonObject = dict[str, Any]
 type TextCallback = Callable[[str], None]
 
 CHAT_PATH = "/v1/chat/completions"
-FATAL_STATUSES: frozenset[int] = frozenset({401, 402, 403})
+FATAL_STATUSES: frozenset[int] = frozenset({401, 402, 403, 404})
 RETRY_STATUSES: frozenset[int] = frozenset({408, 429, 500, 502, 503, 504, 524, 529})
 _FENCE = re.compile(r"^```[A-Za-z0-9_-]*\s*(.*?)\s*```$", re.DOTALL)
 

@@ -78,6 +78,14 @@ async def test_post_json_sends_key_path_and_body(make_client: ClientFactory) -> 
         pytest.param(
             [_json(402, {"error": {"message": "credits"}})], 1, 402, False, True, id="402-fatal"
         ),
+        pytest.param(
+            [_json(404, {"error": {"message": "No endpoints found"}})],
+            1,
+            404,
+            False,
+            True,
+            id="404-no-endpoint-is-fatal",
+        ),
         pytest.param([_json(500, {})] * 3, 3, 500, True, False, id="500-exhausts-retries"),
         pytest.param([_text(503, "down")] * 3, 3, 503, True, False, id="503-text-body"),
         pytest.param([_connect_error] * 3, 3, None, True, False, id="transport-error"),
