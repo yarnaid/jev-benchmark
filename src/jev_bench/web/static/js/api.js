@@ -1,5 +1,6 @@
 /**
  * JSON client for the /api endpoints; the browser-stored key is attached only to job-starting calls.
+ * Query parameters that are undefined, null or "" are omitted (an unset label threshold is never sent).
  * Exports: api, ApiError, needsKey.
  */
 import { getKey } from "./key.js";
@@ -24,7 +25,7 @@ async function request(method, path, { body, withKey = false } = {}) {
 }
 
 function query(params) {
-  const entries = Object.entries(params).filter(([, value]) => value !== undefined && value !== "");
+  const entries = Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== "");
   const text = new URLSearchParams(entries).toString();
   return text ? `?${text}` : "";
 }
@@ -42,9 +43,9 @@ export const api = {
   run: (id) => request("GET", `/runs/${segment(id)}`),
   createRun: (body) => request("POST", "/runs", { body, withKey: true }),
   cancelRun: (id) => request("POST", `/runs/${segment(id)}/cancel`),
-  compare: (runIds) => request("GET", `/compare${query({ runs: runIds.join(",") })}`),
-  emails: (generationIds, runIds = []) =>
-    request("GET", `/emails${query({ generations: generationIds.join(","), runs: runIds.join(",") })}`),
+  compare: (runIds, threshold) => request("GET", `/compare${query({ runs: runIds.join(","), threshold })}`),
+  emails: (generationIds, runIds = [], threshold) =>
+    request("GET", `/emails${query({ generations: generationIds.join(","), runs: runIds.join(","), threshold })}`),
   email: (id, runIds = []) => request("GET", `/emails/${segment(id)}${query({ runs: runIds.join(",") })}`),
   putLabel: (id, answers) => request("PUT", `/labels/${segment(id)}`, { body: { answers } }),
 };

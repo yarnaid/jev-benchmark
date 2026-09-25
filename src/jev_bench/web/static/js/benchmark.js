@@ -1,6 +1,8 @@
 /**
  * Benchmark page: generation picker, one card per column (model, mode, run/cancel, live stats) and the
  * comparison of the latest completed run per column on exactly the selected generations (or ?runs=…).
+ * A label-threshold slider appears in the page header when the report has a multi-label question; it is
+ * rendered once (so dragging never loses focus) and re-fetches the comparison with ?threshold=.
  * Exports: none (page entry point).
  */
 import { api } from "./api.js";
@@ -9,10 +11,10 @@ import { duration, fixed, money, num, perMillion } from "./format.js";
 import { initLayout, startJob, toastError } from "./layout.js";
 import { renderReport } from "./report.js";
 import { readPref, writePref } from "./storage.js";
-import { checklist, emptyState, progressBar, statusBadge } from "./widgets.js";
+import { checklist, emptyState, progressBar, statusBadge, thresholdSlider } from "./widgets.js";
 
 const POLL_MS = 1000;
-const state = { catalog: [], generations: [], runs: [], progress: new Map(), selected: [], pinned: [], timers: new Map() };
+const state = { catalog: [], generations: [], runs: [], progress: new Map(), selected: [], pinned: [], timers: new Map(), threshold: readPref("threshold", null), sliderShown: false };
 
 const sameSet = (values, set) => values.length === set.size && values.every((value) => set.has(value));
 const selectedSet = () => new Set(state.selected);
@@ -237,7 +239,28 @@ async function refreshComparison() {
     return;
   }
   clear(container, h("p", { class: "small text-body-secondary" }, "Loading comparison…"));
-  renderReport(container, await api.compare(runIds), { pinned: state.pinned.length > 0 });
+  const report = await api.compare(runIds, state.threshold);
+  renderThreshold(report);
+  renderReport(container, report, { pinned: state.pinned.length > 0 });
+}
+
+function renderThreshold(report) {
+  const target = document.getElementById("threshold-control");
+  const multi = report.questions.find((question) => question.type === "multi");
+  if (!multi) {
+    clear(target);
+    state.sliderShown = false;
+    return;
+  }
+  if (state.sliderShown) return;
+  clear(target, thresholdSlider({ value: multi.threshold, onChange: onThreshold }));
+  state.sliderShown = true;
+}
+
+function onThreshold(value) {
+  state.threshold = value;
+  writePref("threshold", value);
+  refreshComparison().catch(toastError);
 }
 
 main().catch(toastError);

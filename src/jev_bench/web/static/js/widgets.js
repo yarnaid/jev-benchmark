@@ -1,7 +1,9 @@
 /**
- * Reusable widgets built with h(): status badges, progress bars, empty states and a checkbox dropdown
- * ("checklist") taking items [{ value, text, hint }] and calling onChange(selectedValues).
- * Exports: statusBadge, progressBar, emptyState, checklist.
+ * Reusable widgets built with h(): status badges, progress bars, empty states, a checkbox dropdown
+ * ("checklist") taking items [{ value, text, hint }] and calling onChange(selectedValues), and a
+ * multi-label threshold slider (50-100 % of the top probability, step 5) calling onChange(fraction)
+ * after a debounce.
+ * Exports: statusBadge, progressBar, emptyState, checklist, thresholdSlider.
  */
 import { h, icon } from "./dom.js";
 
@@ -58,4 +60,20 @@ export function checklist({ label, items, selected, onChange }) {
     h("button", { class: "btn btn-outline-primary btn-sm dropdown-toggle", type: "button", "data-bs-toggle": "dropdown", "data-bs-auto-close": "outside", "aria-expanded": "false" }, icon("collection"), " ", summary),
     h("ul", { class: "dropdown-menu shadow-sm checklist-menu" }, options.length ? options : empty),
   );
+}
+
+export function thresholdSlider({ value, onChange, delayMs = 300 }) {
+  const percent = (fraction) => `${Math.round(fraction * 100)}%`;
+  const output = h("output", { class: "small font-monospace text-nowrap" }, percent(value));
+  let timer = null;
+  const oninput = (event) => {
+    const next = Number(event.target.value) / 100;
+    output.textContent = percent(next);
+    clearTimeout(timer);
+    timer = setTimeout(() => onChange(next), delayMs);
+  };
+  const input = h("input", { type: "range", class: "form-range threshold-range", min: 50, max: 100, step: 5, value: Math.round(value * 100), "aria-label": "Label threshold", oninput });
+  const label = h("span", { class: "small text-nowrap" }, icon("sliders"), " Label threshold");
+  const hint = "A label counts as applied when its probability is at least this share of the most probable label";
+  return h("div", { class: "d-flex align-items-center gap-2", title: hint }, label, input, output);
 }

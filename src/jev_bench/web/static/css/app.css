@@ -80,6 +80,10 @@ code,
   min-width: 18rem;
 }
 
+.threshold-range {
+  width: 8rem;
+}
+
 .clickable {
   cursor: pointer;
 }

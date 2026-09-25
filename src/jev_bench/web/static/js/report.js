@@ -1,6 +1,8 @@
 /**
  * Renders a ComparisonReport: a raters summary table, warnings, then one card per question with an
- * argmax-count chart, per-rater statistics and pairwise metrics (95% bootstrap CIs) plus Fleiss' kappa.
+ * answer-count chart, per-rater statistics and pairwise metrics (95% bootstrap CIs) plus Fleiss' kappa.
+ * Score questions show a 0-100 mean score; multi-label questions show labels per email, exact-set
+ * match, Jaccard, F1 and the macro kappa at the threshold the report was computed with.
  * Exports: renderReport.
  */
 import { countsChart, destroyCharts } from "./charts.js";
@@ -58,6 +60,9 @@ function table(head, rows) {
 
 function questionCard(question, labels) {
   const canvas = h("canvas", { role: "img", "aria-label": `${question.id} answer counts` });
+  const multi = question.type === "multi";
+  const fleiss = `Fleiss κ${multi ? " (mean over labels)" : ""} ${fixed(question.fleiss_kappa, 3)}`;
+  const tables = multi ? [multiRaterTable(question, labels), multiPairTable(question, labels)] : [raterTable(question, labels), pairTable(question, labels)];
   const element = h(
     "div",
     { class: "col-12 col-xl-6" },
@@ -69,19 +74,20 @@ function questionCard(question, labels) {
         { class: "card-header d-flex align-items-center gap-2" },
         h("code", { class: "fw-semibold" }, question.id),
         h("span", { class: "badge text-bg-light border" }, question.type),
-        h("span", { class: "ms-auto small text-body-secondary" }, `Fleiss κ ${fixed(question.fleiss_kappa, 3)}`),
+        multi ? thresholdBadge(question.threshold) : null,
+        h("span", { class: "ms-auto small text-body-secondary" }, fleiss),
       ),
-      h("div", { class: "card-body" }, h("div", { class: "chart-box mb-3" }, canvas), raterTable(question, labels), pairTable(question, labels)),
+      h("div", { class: "card-body" }, h("div", { class: "chart-box mb-3" }, canvas), tables),
     ),
   );
   return { element, draw: () => question.raters.length && countsChart(canvas, question, labels) };
 }
 
 function raterTable(question, labels) {
-  const extra = question.type === "score" ? "Mean level" : question.type === "noul" ? "Mean P(yes)" : null;
+  const extra = question.type === "score" ? "Mean score (0–100)" : question.type === "noul" ? "Mean P(yes)" : null;
   const head = ["Rater", "n", "Entropy", "Confidence", ...(extra ? [extra] : [])];
   const rows = question.raters.map((stats) => {
-    const value = question.type === "score" ? fixed(stats.mean_level, 2) : fixed(stats.mean.yes, 3);
+    const value = question.type === "score" ? fixed(stats.mean_score, 0) : fixed(stats.mean.yes, 3);
     return h("tr", {}, h("td", { class: "small" }, labels[stats.rater] ?? stats.rater), h("td", {}, num(stats.n)), h("td", {}, fixed(stats.mean_entropy, 3)), h("td", {}, pct(stats.mean_confidence)), extra ? h("td", {}, value) : null);
   });
   return h("div", { class: "table-responsive" }, table(head, rows));
@@ -91,14 +97,64 @@ function interval(bounds, format) {
   return bounds ? h("small", { class: "text-body-secondary" }, ` [${format(bounds[0])}, ${format(bounds[1])}]`) : null;
 }
 
+function thresholdBadge(threshold) {
+  const title = "A label counts as applied when its probability is at least this share of the most probable label";
+  return h("span", { class: "badge text-bg-info", title }, `≥ ${Math.round(threshold * 100)}% of top`);
+}
+
+function multiRaterTable(question, labels) {
+  const head = ["Rater", "n", "Labels / email", "Entropy", "Confidence"];
+  const rows = question.raters.map((stats) =>
+    h(
+      "tr",
+      {},
+      h("td", { class: "small" }, labels[stats.rater] ?? stats.rater),
+      h("td", {}, num(stats.n)),
+      h("td", {}, fixed(stats.mean_labels, 2)),
+      h("td", {}, fixed(stats.mean_entropy, 3)),
+      h("td", {}, pct(stats.mean_confidence)),
+    ),
+  );
+  return h("div", { class: "table-responsive" }, table(head, rows));
+}
+
+function noPairs() {
+  return h("p", { class: "small text-body-secondary mb-0" }, "No overlapping raters for this question.");
+}
+
+function pairName(pair, labels) {
+  return h("td", { class: "small" }, `${labels[pair.a] ?? pair.a} ↔ ${labels[pair.b] ?? pair.b}`);
+}
+
+function multiPairTable(question, labels) {
+  if (!question.pairs.length) return noPairs();
+  const head = ["Pair", "n", "Exact match", "Jaccard", "F1", "κ (macro)", "JSD", "Brier"];
+  const two = (value) => fixed(value, 2);
+  const rows = question.pairs.map((pair) =>
+    h(
+      "tr",
+      {},
+      pairName(pair, labels),
+      h("td", {}, num(pair.n)),
+      h("td", {}, pct(pair.agreement), interval(pair.agreement_ci, pct)),
+      h("td", {}, fixed(pair.jaccard, 3), interval(pair.jaccard_ci, two)),
+      h("td", {}, fixed(pair.f1, 3)),
+      h("td", {}, fixed(pair.kappa, 3), interval(pair.kappa_ci, two)),
+      h("td", {}, fixed(pair.jsd, 3)),
+      h("td", {}, fixed(pair.brier, 3)),
+    ),
+  );
+  return h("div", { class: "table-responsive" }, table(head, rows));
+}
+
 function pairTable(question, labels) {
-  if (!question.pairs.length) return h("p", { class: "small text-body-secondary mb-0" }, "No overlapping raters for this question.");
+  if (!question.pairs.length) return noPairs();
   const head = ["Pair", "n", "Agreement", "κ", "JSD", "r", "Brier"];
   const rows = question.pairs.map((pair) =>
     h(
       "tr",
       {},
-      h("td", { class: "small" }, `${labels[pair.a] ?? pair.a} ↔ ${labels[pair.b] ?? pair.b}`),
+      pairName(pair, labels),
       h("td", {}, num(pair.n)),
       h("td", {}, pct(pair.agreement), interval(pair.agreement_ci, pct)),
       h("td", {}, fixed(pair.kappa, 3), interval(pair.kappa_ci, (value) => fixed(value, 2))),

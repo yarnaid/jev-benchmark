@@ -1,5 +1,6 @@
 /**
- * Chart.js helpers: grouped bar chart of argmax counts per option (one dataset per rater).
+ * Chart.js helpers: grouped bar chart of answer counts per option (one dataset per rater): argmax
+ * counts, or applied-label counts for a multi-label question.
  * Exports: countsChart, destroyCharts.
  */
 
@@ -9,7 +10,7 @@ const charts = new Set();
 export function countsChart(canvas, question, labels) {
   const datasets = question.raters.map((stats, index) => ({
     label: labels[stats.rater] ?? stats.rater,
-    data: question.options.map((option) => stats.argmax_counts[option] ?? 0),
+    data: question.options.map((option) => (stats.label_counts ?? stats.argmax_counts)[option] ?? 0),
     backgroundColor: PALETTE[index % PALETTE.length],
     borderRadius: 3,
   }));
