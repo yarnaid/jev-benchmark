@@ -115,3 +115,10 @@ def test_ref_counter_counts_tokens_split_across_chunks() -> None:
         counter.feed(chunk)
     assert counter.count == 2
     assert seen == [1, 2]
+
+
+def test_multi_answers_are_normalized_like_choice(multi_questions: QuestionSet) -> None:
+    raw = {**_VALID, "topics": {"billing": 2, "meeting": 1, "travel": 1}}
+    parsed, notes = parse_email_answers(raw, multi_questions)
+    assert notes == []
+    assert parsed["topics"] == pytest.approx({"billing": 0.5, "meeting": 0.25, "travel": 0.25})

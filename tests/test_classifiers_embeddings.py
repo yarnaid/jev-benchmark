@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import math
 from pathlib import Path
 from typing import Any
 
@@ -28,6 +29,9 @@ _VECTORS: dict[str, list[float]] = {
     "now": [0.0, 0.0, 1.0],
     "yes": [1.0, 0.0, 0.0],
     "no": [0.0, 1.0, 0.0],
+    "billing": [1.0, 0.0, 0.0],
+    "meeting": [1.0, 0.1, 0.0],
+    "travel": [0.0, 1.0, 0.0],
     "junk mail": [2.0, 0.0, 0.0],
     "hi friend": [0.0, 3.0, 0.0],
     "blank": [0.0, 0.0, 0.0],
@@ -264,3 +268,20 @@ async def test_classifier_shape(
     assert classifier.budget == Budget(total=100_000, item=8192)
     assert classifier.sizing.overhead == 0
     assert classifier.input_tokens(_email("junk mail")) == 3
+
+
+async def test_multi_questions_get_a_softmax_distribution(
+    make_client: ClientFactory, multi_questions: QuestionSet, tmp_path: Path
+) -> None:
+    classifier = _classifier(
+        make_client(EmbeddingServer()), multi_questions, EmbeddingCache(tmp_path / "v.jsonl")
+    )
+    junk = _email("junk mail")
+    await classifier.prepare([junk])
+    answers = (await classifier.classify([junk])).outcomes[junk.id].answers
+    assert answers is not None
+    topics = answers["topics"]
+    assert sum(topics.values()) == pytest.approx(1.0)
+    assert topics["meeting"] / topics["billing"] == pytest.approx(
+        math.exp((1 / math.sqrt(1.01) - 1) / 0.05)
+    )

@@ -272,3 +272,49 @@ async def test_classify_with_malformed_answers_and_usage(
     assert outcome.error is not None
     assert "missing or mistyped" in outcome.error
     assert result.usage.cost_estimated is True
+
+
+def test_multi_questions_travel_as_a_decisions_choice(multi_questions: QuestionSet) -> None:
+    assert questions_payload(multi_questions)["topics"] == {
+        "type": "choice",
+        "instructions": "Which topics?",
+        "criteria": {
+            "billing": "About money",
+            "meeting": "About a meeting",
+            "travel": "About a trip",
+        },
+    }
+
+
+@pytest.mark.parametrize(
+    ("answer", "expected", "notes"),
+    [
+        pytest.param(
+            {"type": "choice", "choice": "billing", "probabilities": {"billing": 3, "meeting": 1}},
+            {"billing": 0.75, "meeting": 0.25, "travel": 0.0},
+            [],
+            id="choice-probabilities",
+        ),
+        pytest.param(
+            {"type": "choice", "choice": "meeting"},
+            {"billing": 0.0, "meeting": 1.0, "travel": 0.0},
+            ["topics: probabilities missing, one-hot on choice"],
+            id="choice-without-probabilities",
+        ),
+        pytest.param(
+            {"type": "multi", "probabilities": {"billing": 1}},
+            None,
+            ["topics: missing or mistyped answer"],
+            id="multi-is-not-a-decisions-type",
+        ),
+    ],
+)
+def test_parse_decisions_reads_multi_as_choice(
+    multi_questions: QuestionSet,
+    answer: dict[str, Any],
+    expected: dict[str, float] | None,
+    notes: list[str],
+) -> None:
+    parsed, found = parse_decisions({**_ANSWERS, "topics": answer}, multi_questions)
+    assert parsed.get("topics") == (None if expected is None else pytest.approx(expected))
+    assert found == notes

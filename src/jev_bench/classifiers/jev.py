@@ -1,5 +1,8 @@
 """Jev column: one Decisions API call per email carrying every question.
 
+Decisions has no multi-label primitive; a multi question is sent and parsed as a `choice`, and its
+label set is read from that distribution later (`p >= threshold * max(p)`).
+
 Constants:
     DECISIONS_PATH
 Classes:
@@ -31,6 +34,7 @@ from jev_bench.openrouter import JsonObject, OpenRouterClient
 from jev_bench.questions import (
     AnyQuestion,
     Distribution,
+    MultiQuestion,
     NoulQuestion,
     QuestionSet,
     ScoreQuestion,
@@ -64,7 +68,15 @@ def _question_payload(question: AnyQuestion) -> JsonObject:
         criteria = list(question.options.values())
     else:
         criteria = dict(question.options)
-    return {"type": question.type, "instructions": question.instructions, "criteria": criteria}
+    return {
+        "type": _decision_type(question),
+        "instructions": question.instructions,
+        "criteria": criteria,
+    }
+
+
+def _decision_type(question: AnyQuestion) -> str:
+    return "choice" if isinstance(question, MultiQuestion) else question.type
 
 
 def parse_decisions(
@@ -75,7 +87,7 @@ def parse_decisions(
     answers_dict = answers if isinstance(answers, Mapping) else {}
     for question in questions.questions:
         answer = answers_dict.get(question.id)
-        if not isinstance(answer, dict) or answer.get("type") != question.type:
+        if not isinstance(answer, dict) or answer.get("type") != _decision_type(question):
             notes.append(f"{question.id}: missing or mistyped answer")
             continue
         distribution, note = _parse_answer(question, answer)

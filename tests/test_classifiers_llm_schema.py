@@ -60,3 +60,8 @@ def test_email_refs(count: int, first: str, last: str, length: int) -> None:
 
 def test_email_refs_empty() -> None:
     assert email_refs(0) == []
+
+
+def test_multi_schema_asks_for_one_number_per_option(multi_questions: QuestionSet) -> None:
+    topics = answers_schema(multi_questions)["properties"]["topics"]
+    assert topics == _options("Which topics?", "billing", "meeting", "travel")
