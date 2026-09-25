@@ -21,6 +21,9 @@ PAGE_MODULES = (
     "explorer.js",
     "runs.js",
     "distribution.js",
+    "answers.js",
+    "selection.js",
+    "email-detail.js",
 )
 
 

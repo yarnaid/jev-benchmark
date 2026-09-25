@@ -1,17 +1,23 @@
 /**
- * Explorer page: browse the emails of selected generations, compare each run's top answer with the
- * generator reference, sort by disagreement, and open an email to see every distribution and edit
- * human labels.
+ * Explorer page: browse the emails of selected generations, compare each run's top answer (the applied
+ * labels of a multi-label question; level and 0-100 score of a score question) with the generator
+ * reference (match / partial / mismatch), sort by disagreement, and open an email to see every
+ * distribution and edit human labels. Without ?runs= the latest completed run per column on the
+ * selected generations is pre-selected; the label-threshold slider re-fetches the rows.
  * Exports: none (page entry point).
  */
+import { answerText, asLabels, setMatch, withScore } from "./answers.js";
 import { api } from "./api.js";
-import { probabilityCell } from "./distribution.js";
 import { clear, h, icon } from "./dom.js";
+import { emailDetail } from "./email-detail.js";
 import { fixed, shortModel, when } from "./format.js";
 import { initLayout, toastError, toastSuccess } from "./layout.js";
-import { checklist, emptyState } from "./widgets.js";
+import { latestCompletedPerColumn } from "./selection.js";
+import { readPref, writePref } from "./storage.js";
+import { checklist, emptyState, thresholdSlider } from "./widgets.js";
 
 const EMPTY_FILTERS = { text: "", generator: "", reference: "", trait: "" };
+const MATCH_CLASS = { match: "cell-match", partial: "cell-partial", mismatch: "cell-mismatch", "": "" };
 const state = {
   generations: [],
   runs: [],
@@ -22,12 +28,14 @@ const state = {
   rows: [],
   filters: { ...EMPTY_FILTERS },
   byDisagreement: true,
+  threshold: readPref("threshold", null),
+  sliderShown: false,
 };
 
 const listParam = (params, name) => (params.get(name) ?? "").split(",").filter(Boolean);
 const matchesPair = (values, pair) => {
   const [key, value] = pair.split("=");
-  return values[key] === value;
+  return asLabels(values[key]).includes(value);
 };
 const runLabel = (run) => `${run.column} · ${shortModel(run.model)}${run.mode === "all_in_one" ? " · all-in-one" : ""}`;
 
@@ -39,7 +47,8 @@ async function main() {
   state.runs = runs.map((view) => view.meta).filter((run) => run.status !== "running");
   const requested = listParam(params, "generations");
   state.selectedGenerations = requested.length ? requested : state.generations.slice(0, 1).map((generation) => generation.id);
-  state.selectedRuns = listParam(params, "runs");
+  const requestedRuns = listParam(params, "runs");
+  state.selectedRuns = requestedRuns.length ? requestedRuns : latestCompletedPerColumn(state.runs, state.selectedGenerations);
   renderPickers();
   await loadRows();
 }
@@ -57,6 +66,7 @@ function renderPickers() {
 
 function onGenerations(values) {
   state.selectedGenerations = values;
+  state.selectedRuns = latestCompletedPerColumn(state.runs, values);
   syncUrl();
   renderPickers();
   loadRows().catch(toastError);
@@ -88,13 +98,38 @@ async function loadRows() {
     return;
   }
   clear(target, h("p", { class: "small text-body-secondary" }, "Loading…"));
-  const list = await api.emails(state.selectedGenerations, activeRuns());
+  const list = await api.emails(state.selectedGenerations, activeRuns(), state.threshold);
   state.questions = list.questions.questions;
   state.question = state.questions[0]?.id ?? null;
   state.rows = list.rows;
   state.filters = { ...EMPTY_FILTERS };
   renderFilters();
+  renderThreshold();
   renderTable();
+}
+
+async function refreshRows() {
+  state.rows = (await api.emails(state.selectedGenerations, activeRuns(), state.threshold)).rows;
+  renderTable();
+}
+
+function renderThreshold() {
+  const target = document.getElementById("threshold-control");
+  const multi = state.questions.find((question) => question.type === "multi");
+  if (!multi) {
+    clear(target);
+    state.sliderShown = false;
+    return;
+  }
+  if (state.sliderShown) return;
+  clear(target, thresholdSlider({ value: state.threshold ?? multi.threshold, onChange: onThreshold }));
+  state.sliderShown = true;
+}
+
+function onThreshold(value) {
+  state.threshold = value;
+  writePref("threshold", value);
+  refreshRows().catch(toastError);
 }
 
 function filterSelect(label, key, options) {
@@ -173,8 +208,8 @@ function emailRow(row, runs) {
   const reference = row.reference[state.question];
   const cells = runs.map((id) => {
     const answer = row.top[id]?.[state.question];
-    const style = answer === undefined ? "" : answer === reference ? "cell-match" : "cell-mismatch";
-    return h("td", { class: `small ${style}` }, answer ?? "—");
+    const text = withScore(answerText(answer), row.scores[id]?.[state.question]);
+    return h("td", { class: `small ${MATCH_CLASS[setMatch(reference, answer)]}` }, text);
   });
   const labelled = Object.keys(row.human).length ? h("span", { class: "badge text-bg-info ms-1", title: "Has human labels" }, icon("person-check")) : null;
   const open = () => openEmail(row.id);
@@ -185,7 +220,7 @@ function emailRow(row, runs) {
     h("td", { class: "small text-truncate", style: "max-width: 14rem", title: row.sender }, row.sender),
     h("td", { class: "text-truncate", style: "max-width: 22rem", title: row.subject }, row.subject),
     h("td", { class: "small" }, shortModel(row.generator_model)),
-    h("td", { class: "small fw-semibold" }, reference ?? "—", labelled),
+    h("td", { class: "small fw-semibold" }, withScore(answerText(reference), row.reference_scores[state.question]), labelled),
     cells,
     h("td", { class: "font-monospace small" }, fixed(row.disagreement, 3)),
   );
@@ -197,72 +232,12 @@ async function openEmail(emailId) {
   bootstrap.Offcanvas.getOrCreateInstance(document.getElementById("email-panel")).show();
   try {
     const detail = await api.email(emailId, runColumns());
+    const row = state.rows.find((item) => item.id === emailId) ?? null;
     clear(document.getElementById("email-panel-title"), detail.email.subject);
-    clear(body, emailHeader(detail.email), h("div", { class: "email-body mb-3" }, detail.email.body), labellingForm(detail));
+    clear(body, emailDetail(detail, { row, threshold: state.threshold, onSave: saveLabels }));
   } catch (error) {
     clear(body, h("div", { class: "alert alert-danger" }, error instanceof Error ? error.message : String(error)));
   }
-}
-
-function emailHeader(email) {
-  const party = (value) => (value.name ? `${value.name} <${value.address}>` : value.address);
-  const traits = Object.entries(email.traits).map(([name, value]) => `${name}=${value}`).join(", ");
-  const rows = [
-    ["From", party(email.sender)],
-    ["To", email.to.map(party).join(", ")],
-    ["Cc", email.cc.map(party).join(", ") || "—"],
-    ["Sent", when(email.sent_at)],
-    ["Generator", email.generator_model],
-    ["Traits", traits || "—"],
-    ["Id", email.id],
-  ];
-  return h("dl", { class: "row small mb-2" }, rows.flatMap(([label, value]) => [h("dt", { class: "col-3" }, label), h("dd", { class: "col-9 text-break mb-1" }, value)]));
-}
-
-function labellingForm(detail) {
-  const choices = { ...detail.human };
-  const runIds = Object.keys(detail.predictions);
-  const sections = detail.questions.questions.map((question) => questionSection(question, detail, runIds, choices));
-  const save = h("button", { class: "btn btn-primary", type: "button", onclick: () => saveLabels(detail.email.id, choices, detail.human) }, icon("save"), " Save labels");
-  return h("div", {}, sections, h("div", { class: "d-flex justify-content-end mt-2" }, save));
-}
-
-function humanSelect(question, current, choices) {
-  const onchange = (event) => {
-    choices[question.id] = event.target.value || null;
-  };
-  const options = Object.entries(question.options).map(([option, text]) => h("option", { value: option, selected: current === option, title: text }, option));
-  return h("select", { class: "form-select form-select-sm", "aria-label": `Human label for ${question.id}`, onchange }, h("option", { value: "" }, "— not labelled —"), options);
-}
-
-function questionSection(question, detail, runIds, choices) {
-  const reference = detail.email.reference_answers[question.id];
-  const head = ["Option", "Ref", ...runIds.map((id) => detail.run_labels[id] ?? id)];
-  const rows = Object.entries(question.options).map(([option, text]) =>
-    h("tr", {}, h("td", { class: "small", title: text }, option), h("td", { class: "text-center" }, reference === option ? icon("check-lg") : ""), runIds.map((id) => runCell(detail.predictions[id], question.id, option))),
-  );
-  const table = h("table", { class: "table table-sm mb-2" }, h("thead", {}, h("tr", {}, head.map((cell) => h("th", { class: "small" }, cell)))), h("tbody", {}, rows));
-  return h(
-    "div",
-    { class: "card mb-2" },
-    h("div", { class: "card-header py-1 d-flex align-items-center gap-2" }, h("code", {}, question.id), h("span", { class: "small text-body-secondary text-truncate" }, question.instructions)),
-    h(
-      "div",
-      { class: "card-body py-2" },
-      h("div", { class: "table-responsive" }, table),
-      h("div", { class: "d-flex align-items-center gap-2" }, h("span", { class: "small text-nowrap" }, icon("person"), " Human"), humanSelect(question, detail.human[question.id], choices)),
-    ),
-  );
-}
-
-function runCell(prediction, questionId, option) {
-  if (!prediction) return h("td", { class: "small text-body-secondary" }, "—");
-  if (prediction.error) return h("td", { class: "small text-danger", title: prediction.error }, "error");
-  const distribution = prediction.answers?.[questionId];
-  if (!distribution) return h("td", { class: "small text-body-secondary" }, "—");
-  const top = Object.entries(distribution).reduce((best, entry) => (entry[1] > best[1] ? entry : best))[0];
-  const similarity = prediction.similarities?.[questionId]?.[option] ?? null;
-  return probabilityCell(distribution[option], { similarity, highlight: top === option });
 }
 
 async function saveLabels(emailId, choices, original) {
