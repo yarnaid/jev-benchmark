@@ -12,7 +12,8 @@ Design: `docs/superpowers/specs/2026-09-24-jev-benchmark-design.md` (§14 record
 planning). Implementation plan: `docs/superpowers/plans/2026-09-24-jev-benchmark.md`.
 Question model v2 (multi-label category, 0–100 scores, new questions): spec
 `docs/superpowers/specs/2026-09-25-question-model-v2-design.md`, plan
-`docs/superpowers/plans/2026-09-25-question-model-v2.md`.
+`docs/superpowers/plans/2026-09-25-question-model-v2.md`. UI upgrades and the Analyze tab: spec
+`docs/superpowers/specs/2026-09-25-ui-analyze-design.md`.
 
 **All repository content is in English** (code, docs, UI copy, prompts, commits).
 
@@ -89,8 +90,34 @@ node --test tests/js/                           # JS unit tests (Node's runner, 
     - over the distributions, as for choice: JSD, entropy, confidence and Brier (against a uniform target);
   - `GET /api/compare` takes its base question set from the **newest** selected run's snapshot, so the URL
     order of `runs=` never changes the report.
+- **Cost estimates**: `run_estimate.py` (`POST /api/runs/estimate`) plans a run exactly like the runner
+  (`run_launcher.resolve_run` + `runner.plan_run`); it reports an upper bound from tokens and list prices,
+  and scales the recorded cost of past completed runs of the same column, model and mode.
+- **Analysis** (`analysis/`, the Analyze tab): an LLM analyst reads a whole comparison and writes a
+  Markdown report.
+  - `config/analysis.toml` holds the default model, the limits and the two `string.Template` prompts. The
+    placeholders are `$generations $runs $questions $report $emails $disputed`, validated in
+    `analysis/config.py` and again for prompts edited in the browser.
+  - `web.loaders.load_analysis_source` builds an `AnalysisSource`: the report, email rows and run raters.
+    It uses `load_comparison`, which the compare route shares.
+  - `analysis/context.py` turns it into placeholder values:
+    - a compact report JSON (`report_json.py`);
+    - one table per question of every run's answer (`tables.py`);
+    - the emails with disagreement > 0, most disputed first, in full;
+    - run and question summaries (`summaries.py`).
+  - Runs are named R1… in request order, and the UI sends catalog column order, so Jev is R1. Emails are
+    `e001…`; the analyst never sees email ids or generator models.
+  - `analysis/launcher.py` estimates the request (tokens against the context window, upper-bound cost) and
+    refuses one that does not fit. `analysis/job.py` streams the reply, checkpoints the partial text into
+    `data/analyses/<id>.json` as a live preview, and records usage and cost.
+  - `temperature` is sent only when the catalog lists it. Interrupted analyses are swept on server start.
 - **Web**: `web/app.py` (lifespan builds `Services`) exposes JSON routes under `/api` (`web/routes/`) and a
   build-free UI in `web/static/` (Bootstrap 5.3 + Chart.js from jsDelivr with SRI).
+  - Every metric has a (?) tooltip. The texts live once in `js/glossary.js`, which the Help page
+    (`help.html`) also renders; a node test checks that every `withHelp`/`helpIcon` key exists.
+  - Rater colors come from `js/palette.js` (validated categorical order, light and dark steps).
+  - Analysis reports render through `js/markdown.js` (pure parser) and `js/markdown-render.js` (`h()`
+    nodes, never HTML). An `e001` ref links to `explorer.html?…&email=<id>`.
 - **CLI**: `cli.py` (typer, lazy imports) delegates to `cli_jobs.py`, which uses the same launchers and
   `Services` as the web app.
 
