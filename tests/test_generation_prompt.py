@@ -84,6 +84,21 @@ def test_parse_generator_output_rejects(questions: QuestionSet, mutate: Any) -> 
         parse_generator_output(json.dumps(doc), questions)
 
 
+@pytest.mark.parametrize(
+    "wrap",
+    [
+        pytest.param(lambda doc: f"From: Marcus Bell <m@bell.test>\n\n{doc}", id="preamble"),
+        pytest.param(lambda doc: f"{doc}\n\nHope this helps!", id="trailing-text"),
+        pytest.param(lambda doc: f"Here you go:\n{doc}\nDone.", id="preamble-and-trailing"),
+    ],
+)
+def test_parse_generator_output_ignores_text_around_the_json(
+    questions: QuestionSet, wrap: Any
+) -> None:
+    output = parse_generator_output(wrap(json.dumps(_OUTPUT)), questions)
+    assert output.email.subject == _OUTPUT["email"]["subject"]
+
+
 def test_parse_generator_output_rejects_invalid_json(questions: QuestionSet) -> None:
     with pytest.raises(ValueError, match=r"JSON|Expecting"):
         parse_generator_output("{not json", questions)

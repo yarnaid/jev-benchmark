@@ -6,7 +6,8 @@ Classes:
 Functions:
     render_prompts: (system, user) prompts for one plan item.
     generation_schema: strict JSON schema for `{email, answers}`.
-    parse_generator_output: JSON text -> GeneratorOutput (answers checked against the options).
+    parse_generator_output: JSON text -> GeneratorOutput (answers checked against the options;
+        text around the outermost JSON object, e.g. a model's preamble, is ignored).
     count_mismatches: question-linked traits that the generator's own answers contradict
         (traits absent from `requested` are skipped).
 """
@@ -96,7 +97,7 @@ def generation_schema(questions: QuestionSet) -> JsonSchema:
 
 
 def parse_generator_output(content: str, questions: QuestionSet) -> GeneratorOutput:
-    output = GeneratorOutput.model_validate_json(content)
+    output = GeneratorOutput.model_validate_json(_outermost_object(content))
     invalid = [
         question.id
         for question in questions.questions
@@ -106,6 +107,11 @@ def parse_generator_output(content: str, questions: QuestionSet) -> GeneratorOut
         raise ValueError(f"generator answers missing or invalid for: {invalid}")
     ordered = {question.id: output.answers[question.id] for question in questions.questions}
     return output.model_copy(update={"answers": ordered})
+
+
+def _outermost_object(content: str) -> str:
+    start, end = content.find("{"), content.rfind("}")
+    return content[start : end + 1] if 0 <= start < end else content
 
 
 def count_mismatches(
