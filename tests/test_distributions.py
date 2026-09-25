@@ -14,6 +14,7 @@ from jev_bench.metrics.distributions import (
     expected_level,
     js_divergence,
     normalize,
+    score_0_100,
     softmax,
     to_matrix,
     unit_probability,
@@ -125,3 +126,17 @@ def test_js_divergence_is_symmetric_and_bounded(p: np.ndarray, q: np.ndarray) ->
 
 def test_expected_level() -> None:
     assert expected_level(np.array([[0.0, 0.0, 1.0], [0.5, 0.5, 0.0]])).tolist() == [2.0, 0.5]
+
+
+@pytest.mark.parametrize(
+    ("rows", "expected"),
+    [
+        pytest.param([[1.0, 0.0, 0.0]], [0.0], id="lowest"),
+        pytest.param([[0.0, 0.0, 1.0]], [100.0], id="highest"),
+        pytest.param([[0.5, 0.0, 0.5], [0.0, 1.0, 0.0]], [50.0, 50.0], id="middle"),
+        pytest.param([[0.0, 1.0]], [100.0], id="two-levels"),
+        pytest.param([[0.25, 0.25, 0.25, 0.25]], [50.0], id="uniform-four"),
+    ],
+)
+def test_score_0_100(rows: list[list[float]], expected: list[float]) -> None:
+    assert score_0_100(np.array(rows)).tolist() == pytest.approx(expected)

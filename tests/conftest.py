@@ -4,7 +4,8 @@ Pre-warms numpy.random at collection time so Hypothesis's lazy import never land
 inside a timed test.
 
 Fixtures:
-    questions: a three-question set covering every question type.
+    questions: a three-question set covering the choice, score and noul types.
+    multi_questions: the questions fixture plus a multi-label "topics" question (threshold 0.8).
     make_client: async OpenRouterClient factory.
     make_services: async Services factory on tmp dirs.
     make_app: TestClient factory with the lifespan entered.
@@ -25,7 +26,13 @@ from loguru import logger
 from tests.factories import AppFactory, ClientFactory, ServicesFactory, mini_settings
 
 from jev_bench.openrouter import OpenRouterClient
-from jev_bench.questions import ChoiceQuestion, NoulQuestion, QuestionSet, ScoreQuestion
+from jev_bench.questions import (
+    ChoiceQuestion,
+    MultiQuestion,
+    NoulQuestion,
+    QuestionSet,
+    ScoreQuestion,
+)
 from jev_bench.services import Services
 
 if TYPE_CHECKING:
@@ -79,6 +86,17 @@ def questions() -> QuestionSet:
             ),
         ),
     )
+
+
+@pytest.fixture
+def multi_questions(questions: QuestionSet) -> QuestionSet:
+    topics = MultiQuestion(
+        type="multi",
+        id="topics",
+        instructions="Which topics?",
+        options={"billing": "About money", "meeting": "About a meeting", "travel": "About a trip"},
+    )
+    return QuestionSet(name="mini-multi", questions=(*questions.questions, topics))
 
 
 @pytest.fixture

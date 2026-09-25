@@ -12,6 +12,7 @@ Functions:
     entropy: row-wise Shannon entropy in bits.
     js_divergence: row-wise Jensen-Shannon divergence in bits, within [0, 1].
     expected_level: row-wise expected ordinal level.
+    score_0_100: row-wise expected level scaled to 0-100 (k >= 2 options).
 """
 
 import math
@@ -28,6 +29,7 @@ __all__ = [
     "expected_level",
     "js_divergence",
     "normalize",
+    "score_0_100",
     "softmax",
     "to_matrix",
     "unit_probability",
@@ -89,3 +91,7 @@ def _x_log2_y(x: FloatArray, y: FloatArray) -> FloatArray:
 
 def expected_level(matrix: FloatArray) -> FloatArray:
     return matrix @ np.arange(matrix.shape[1], dtype=np.float64)
+
+
+def score_0_100(matrix: FloatArray) -> FloatArray:
+    return expected_level(matrix) * (100.0 / (matrix.shape[1] - 1))

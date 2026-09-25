@@ -51,7 +51,7 @@ class RaterStats(BaseModel):
 
 class QuestionReport(BaseModel):
     id: str
-    type: Literal["choice", "score", "noul"]
+    type: Literal["choice", "score", "noul", "multi"]
     options: tuple[str, ...]
     raters: list[RaterStats]
     pairs: list[PairStats]
