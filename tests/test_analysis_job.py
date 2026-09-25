@@ -1,6 +1,8 @@
 """Tests for jev_bench.analysis.job."""
 
 import asyncio
+import json
+from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -110,6 +112,31 @@ async def test_failed_analysis(
 ) -> None:
     meta, _, _ = await _run(make_client, tmp_path, fake)
     assert (meta.status, meta.error, meta.result) == ("failed", error, result)
+
+
+def _chunk(text: str) -> bytes:
+    return f"data: {json.dumps({'choices': [{'delta': {'content': text}}]})}\n\n".encode()
+
+
+async def _dropped_stream() -> AsyncIterator[bytes]:
+    yield _chunk("part1")
+    yield _chunk("part2")
+    raise httpx2.ReadError("connection reset")
+
+
+def _dropping(request: httpx2.Request) -> httpx2.Response:
+    return httpx2.Response(
+        200, content=_dropped_stream(), headers={"content-type": "text/event-stream"}
+    )
+
+
+async def test_a_dropped_stream_keeps_the_preview(
+    make_client: ClientFactory, tmp_path: Path
+) -> None:
+    meta, _, _ = await _run(make_client, tmp_path, _dropping)
+    assert (meta.status, meta.result) == ("failed", "part1part2")
+    assert meta.error is not None
+    assert "transport error" in meta.error
 
 
 async def _slow(request: httpx2.Request) -> httpx2.Response:

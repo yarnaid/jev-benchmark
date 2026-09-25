@@ -45,6 +45,19 @@ async def test_estimate_without_catalog_uses_fallbacks(
     assert (estimate.n_disputed, estimate.max_output_tokens) == (0, 500)
 
 
+async def test_the_output_budget_counts_against_the_context(
+    make_services: ServicesFactory, multi_questions: QuestionSet
+) -> None:
+    services = make_services(FakeOpenRouter(models_status=500))
+    source = build_source(multi_questions)
+    base = await estimate_analysis(_request(system_prompt=""), source, services)
+    padding = "x" * ((base.context_length - base.input_tokens - base.max_output_tokens // 2) * 3)
+    estimate = await estimate_analysis(_request(system_prompt=padding), source, services)
+    assert estimate.input_tokens <= estimate.context_length
+    assert estimate.input_tokens + estimate.max_output_tokens > estimate.context_length
+    assert estimate.fits is False
+
+
 @pytest.mark.parametrize(
     ("request_fields", "message"),
     [
