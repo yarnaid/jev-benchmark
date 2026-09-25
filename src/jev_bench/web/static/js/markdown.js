@@ -3,16 +3,21 @@
  * bullet and numbered lists, pipe tables, fenced code, block quotes, rules; inline code, bold, italic,
  * links and e001… email refs) into a plain tree that markdown-render.js turns into DOM nodes. It never
  * produces HTML: raw HTML in the text stays literal text.
+ * Hostile input stays linear: inline spans are bounded (400 characters, 2000 for a URL), each pattern's
+ * next match is cached until the scan passes it, and quotes nest at most QUOTE_DEPTH levels (deeper
+ * markers are folded into the innermost quote).
  * Exports: parseInline, parseMarkdown.
  */
 
 const INLINE = [
-  ["code", /`([^`]+)`/],
-  ["strong", /\*\*(?=\S)([\s\S]*?\S)\*\*|__(?=\S)([\s\S]*?\S)__/],
-  ["em", /\*(?=[^\s*])([^*]*?[^\s*])\*|(?<!\w)_(?=\S)([^_]*?\S)_(?!\w)/],
-  ["link", /\[([^\]]+)\]\(([^)\s]+)\)/],
-  ["ref", /\be\d{3,}\b/],
+  ["code", /`([^`]{1,400})`/g],
+  ["strong", /\*\*(?=\S)([\s\S]{0,400}?\S)\*\*|__(?=\S)([\s\S]{0,400}?\S)__/g],
+  ["em", /\*(?=[^\s*])([^*]{0,400}?[^\s*])\*|(?<!\w)_(?=\S)([^_]{0,400}?\S)_(?!\w)/g],
+  ["link", /\[([^\]]{1,400})\]\(([^)\s]{1,2000})\)/g],
+  ["ref", /\be\d{3,}\b/g],
 ];
+const QUOTE_DEPTH = 8;
+const QUOTES = /^\s*(?:>\s?)+/;
 const HEADING = /^(#{1,6})\s+(.*?)\s*#*\s*$/;
 const FENCE = /^\s*(`{3,}|~{3,})\s*([\w+#.-]*)\s*$/;
 const RULE = /^\s*([-*_])(\s*\1){2,}\s*$/;
@@ -21,26 +26,35 @@ const QUOTE = /^\s*>\s?/;
 const SEPARATOR = /^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$/;
 
 export function parseInline(text) {
+  const source = String(text ?? "");
   const nodes = [];
-  let rest = String(text ?? "");
-  while (rest) {
-    const found = earliest(rest);
-    if (!found) break;
-    pushText(nodes, rest.slice(0, found.match.index));
+  const cache = new Map();
+  let position = 0;
+  for (let found = earliest(source, 0, cache); found; found = earliest(source, position, cache)) {
+    pushText(nodes, source.slice(position, found.match.index));
     nodes.push(inlineNode(found));
-    rest = rest.slice(found.match.index + found.match[0].length);
+    position = found.match.index + found.match[0].length;
   }
-  pushText(nodes, rest);
+  pushText(nodes, source.slice(position));
   return nodes;
 }
 
-function earliest(text) {
+function earliest(source, position, cache) {
   let best = null;
   for (const [type, pattern] of INLINE) {
-    const match = pattern.exec(text);
+    const match = nextMatch(source, position, pattern, cache);
     if (match && (best === null || match.index < best.match.index)) best = { type, match };
   }
   return best;
+}
+
+function nextMatch(source, position, pattern, cache) {
+  const cached = cache.get(pattern);
+  if (cached === null || (cached && cached.index >= position)) return cached;
+  pattern.lastIndex = position;
+  const match = pattern.exec(source);
+  cache.set(pattern, match);
+  return match;
 }
 
 function inlineNode({ type, match }) {
@@ -55,11 +69,15 @@ function pushText(nodes, text) {
 }
 
 export function parseMarkdown(text) {
-  const lines = text === null || text === undefined ? [] : String(text).replace(/\r\n?/g, "\n").split("\n");
+  return parseBlocks(text === null || text === undefined ? "" : String(text), 0);
+}
+
+function parseBlocks(text, depth) {
+  const lines = text ? text.replace(/\r\n?/g, "\n").split("\n") : [];
   const blocks = [];
   let index = 0;
   while (index < lines.length) {
-    const [block, next] = readBlock(lines, index);
+    const [block, next] = readBlock(lines, index, depth);
     if (block) blocks.push(block);
     index = next;
   }
@@ -68,9 +86,9 @@ export function parseMarkdown(text) {
 
 const READERS = [readBlank, readFence, readHeading, readRule, readTable, readQuote, readList, readParagraph];
 
-function readBlock(lines, index) {
+function readBlock(lines, index, depth) {
   for (const reader of READERS) {
-    const result = reader(lines, index);
+    const result = reader(lines, index, depth);
     if (result) return result;
   }
   return [null, index + 1];
@@ -122,12 +140,13 @@ function readTable(lines, index) {
   return [{ type: "table", align, header: header.map(parseInline), rows }, end];
 }
 
-function readQuote(lines, index) {
+function readQuote(lines, index, depth) {
   if (!QUOTE.test(lines[index])) return null;
   let end = index;
   while (end < lines.length && QUOTE.test(lines[end])) end += 1;
-  const inner = lines.slice(index, end).map((line) => line.replace(QUOTE, ""));
-  return [{ type: "quote", children: parseMarkdown(inner.join("\n")) }, end];
+  const marker = depth + 1 >= QUOTE_DEPTH ? QUOTES : QUOTE;
+  const inner = lines.slice(index, end).map((line) => line.replace(marker, ""));
+  return [{ type: "quote", children: parseBlocks(inner.join("\n"), depth + 1) }, end];
 }
 
 function readList(lines, index) {

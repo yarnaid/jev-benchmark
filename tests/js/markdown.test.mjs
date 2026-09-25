@@ -89,3 +89,34 @@ test("parseMarkdown: tolerates null and non-strings", () => {
   assert.deepEqual(parseMarkdown(null), []);
   assert.deepEqual(parseMarkdown(42), [{ type: "paragraph", children: [text("42")] }]);
 });
+
+test("parseInline: a link followed by a closing parenthesis keeps the parenthesis as text", () => {
+  assert.deepEqual(parseInline("[x](a) b)"), [{ type: "link", href: "a", children: [text("x")] }, text(" b)")]);
+});
+
+const HOSTILE = [
+  ["unclosed link brackets", "e001 [ ".repeat(1000)],
+  ["mixed unclosed markers", "**_`[ ".repeat(1000)],
+  ["unclosed bold runs", "**x ".repeat(2000)],
+];
+
+for (const [name, input] of HOSTILE) {
+  test(`parseInline: hostile input stays fast (${name})`, () => {
+    const started = performance.now();
+    const nodes = parseInline(input);
+    assert.ok(performance.now() - started < 200, `took ${Math.round(performance.now() - started)} ms`);
+    assert.ok(nodes.length > 0);
+  });
+}
+
+test("parseMarkdown: deeply nested quotes neither overflow the stack nor lose the text", () => {
+  const [outer] = parseMarkdown(`${">".repeat(2000)} deep`);
+  let depth = 0;
+  let block = outer;
+  while (block.type === "quote") {
+    depth += 1;
+    [block] = block.children;
+  }
+  assert.ok(depth <= 8, `depth ${depth}`);
+  assert.deepEqual(block, { type: "paragraph", children: [text("deep")] });
+});

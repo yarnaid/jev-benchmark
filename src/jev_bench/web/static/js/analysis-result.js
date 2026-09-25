@@ -43,9 +43,18 @@ function stats(meta, progress) {
 }
 
 function report(meta, running) {
-  if (meta.result) return h("div", { class: `markdown-body${running ? " is-streaming" : ""}` }, renderMarkdown(meta.result, { refHref: (ref) => explorerHref(meta, ref) }));
+  if (meta.result) return h("div", { class: `markdown-body${running ? " is-streaming" : ""}` }, markdownOrText(meta));
   if (running) return h("p", { class: "text-body-secondary" }, h("span", { class: "spinner-border spinner-border-sm me-2", role: "status" }), "Waiting for the first words… (the analyst reads everything first)");
   return h("p", { class: "text-body-secondary" }, "No text was returned.");
+}
+
+function markdownOrText(meta) {
+  try {
+    return renderMarkdown(meta.result, { refHref: (ref) => explorerHref(meta, ref) });
+  } catch (error) {
+    console.warn("report shown as plain text", error);
+    return h("pre", { class: "md-code" }, meta.result);
+  }
 }
 
 function promptsSent(meta, open, onToggle) {
