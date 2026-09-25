@@ -26,6 +26,23 @@ def test_static_index_is_served(make_app: AppFactory) -> None:
     assert (STATIC_DIR / "index.html").exists()
 
 
+@pytest.mark.parametrize(
+    "path",
+    [
+        pytest.param("/", id="index"),
+        pytest.param("/analyze.html", id="page"),
+        pytest.param("/js/selection.js", id="module"),
+        pytest.param("/css/app.css", id="stylesheet"),
+    ],
+)
+def test_static_files_are_revalidated_on_every_load(make_app: AppFactory, path: str) -> None:
+    client = make_app(FakeOpenRouter())
+    first = client.get(path)
+    assert (first.status_code, first.headers["cache-control"]) == (200, "no-cache")
+    again = client.get(path, headers={"If-None-Match": first.headers["etag"]})
+    assert (again.status_code, again.headers["cache-control"]) == (304, "no-cache")
+
+
 def test_unknown_api_route_is_404(make_app: AppFactory) -> None:
     assert make_app(FakeOpenRouter()).get("/api/does-not-exist").status_code == 404
 
