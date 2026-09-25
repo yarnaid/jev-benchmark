@@ -55,6 +55,7 @@ export const api = {
   createAnalysis: (body) => request("POST", "/analyses", { body, withKey: true }),
   analyses: () => request("GET", "/analyses"),
   analysis: (id) => request("GET", `/analyses/${segment(id)}`),
+  analysisPrompts: (id) => request("GET", `/analyses/${segment(id)}/prompts`),
   cancelAnalysis: (id) => request("POST", `/analyses/${segment(id)}/cancel`),
 };
 

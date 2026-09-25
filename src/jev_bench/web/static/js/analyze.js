@@ -35,6 +35,7 @@ const state = {
   current: null,
   timer: null,
   promptsOpen: false,
+  sentPrompts: new Map(),
 };
 
 async function main() {
@@ -207,8 +208,19 @@ function renderHistory() {
 function renderResult(view) {
   const target = document.getElementById("result");
   hideTooltips(target);
-  const handlers = { runLabel, onCancel: cancel, onCopy: copy, onDownload: download, promptsOpen: state.promptsOpen, onPromptsToggle: (open) => (state.promptsOpen = open) };
+  const handlers = { runLabel, onCancel: cancel, onCopy: copy, onDownload: download, loadPrompts, promptsOpen: state.promptsOpen, onPromptsToggle: (open) => (state.promptsOpen = open) };
   clear(target, resultCard(view, handlers));
+}
+
+function loadPrompts(analysisId) {
+  if (!state.sentPrompts.has(analysisId)) {
+    const forget = (error) => {
+      state.sentPrompts.delete(analysisId);
+      throw error;
+    };
+    state.sentPrompts.set(analysisId, api.analysisPrompts(analysisId).catch(forget));
+  }
+  return state.sentPrompts.get(analysisId);
 }
 
 async function cancel(analysisId) {

@@ -4,13 +4,16 @@ CPU-bound).
 
 Constants:
     LIGHT: record fields left out of list and create responses (prompts, result, refs).
+    NO_PROMPTS: the prompts, left out of the record a running analysis is polled for.
 Classes:
     AnalysisDefaults: the config's analyst model, prompt templates and limits, plus the
         placeholders a template may use.
     AnalysisView: record + live progress (characters received so far).
+    AnalysisPrompts: the prompts actually sent (read on demand).
 Functions:
-    analysis_defaults, estimate, create_analysis, list_analyses, get_analysis, cancel_analysis:
-        route handlers. An invalid request is HTTP 400, an unknown run or analysis 404.
+    analysis_defaults, estimate, create_analysis, list_analyses, get_analysis, analysis_prompts,
+        cancel_analysis: route handlers. An invalid request is HTTP 400, an unknown run or
+        analysis 404.
 """
 
 import asyncio
@@ -36,9 +39,12 @@ from jev_bench.web.views import CancelView, load_or_404
 
 __all__ = [
     "LIGHT",
+    "NO_PROMPTS",
     "AnalysisDefaults",
+    "AnalysisPrompts",
     "AnalysisView",
     "analysis_defaults",
+    "analysis_prompts",
     "cancel_analysis",
     "create_analysis",
     "estimate",
@@ -49,6 +55,7 @@ __all__ = [
 
 router = APIRouter(tags=["analyses"])
 LIGHT = {"meta": {"system_prompt", "user_prompt", "result", "email_refs"}}
+NO_PROMPTS = {"meta": {"system_prompt", "user_prompt"}}
 
 
 class AnalysisDefaults(BaseModel):
@@ -63,6 +70,11 @@ class AnalysisDefaults(BaseModel):
 class AnalysisView(BaseModel):
     meta: AnalysisMeta
     progress: ProgressView | None
+
+
+class AnalysisPrompts(BaseModel):
+    system_prompt: str
+    user_prompt: str
 
 
 def _view(services: Services, meta: AnalysisMeta) -> AnalysisView:
@@ -122,9 +134,15 @@ def list_analyses(services: ServicesDep) -> list[AnalysisView]:
     return [_view(services, meta) for meta in services.analyses.list_metas()]
 
 
-@router.get("/analyses/{analysis_id}")
+@router.get("/analyses/{analysis_id}", response_model_exclude=NO_PROMPTS)
 def get_analysis(analysis_id: str, services: ServicesDep) -> AnalysisView:
     return _view(services, load_or_404(services.analyses.get, analysis_id, "analysis"))
+
+
+@router.get("/analyses/{analysis_id}/prompts")
+def analysis_prompts(analysis_id: str, services: ServicesDep) -> AnalysisPrompts:
+    meta = load_or_404(services.analyses.get, analysis_id, "analysis")
+    return AnalysisPrompts(system_prompt=meta.system_prompt, user_prompt=meta.user_prompt)
 
 
 @router.post("/analyses/{analysis_id}/cancel")

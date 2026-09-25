@@ -2,8 +2,9 @@
  * The Analyze page's result card and history table. The card shows one analysis: status, model, the
  * legend of run names (R1 = …), live progress (characters received) or duration, tokens and cost, the
  * rendered Markdown report (a live preview while it runs; e001… refs link to the Explorer), copy and
- * download buttons, and the prompts that were sent (rendered only when opened; `promptsOpen` keeps them
- * open across the re-renders of a running analysis).
+ * download buttons, and the prompts that were sent (fetched with `loadPrompts(id)` only when opened;
+ * `promptsOpen` keeps them open across the re-renders of a running analysis). A report that cannot be
+ * rendered is shown as plain text.
  * Exports: resultCard, historyTable.
  */
 import { explorerHref } from "./analysis-links.js";
@@ -13,7 +14,7 @@ import { withHelp } from "./glossary.js";
 import { renderMarkdown } from "./markdown-render.js";
 import { emptyState, statusBadge } from "./widgets.js";
 
-export function resultCard(view, { runLabel, onCancel, onCopy, onDownload, promptsOpen = false, onPromptsToggle = () => {} }) {
+export function resultCard(view, { runLabel, onCancel, onCopy, onDownload, loadPrompts, promptsOpen = false, onPromptsToggle = () => {} }) {
   if (!view) return emptyState("No analysis yet: choose the runs, check the estimate and start one.", "stars");
   const { meta, progress } = view;
   const running = meta.status === "running";
@@ -21,7 +22,7 @@ export function resultCard(view, { runLabel, onCancel, onCopy, onDownload, promp
     ? h("button", { class: "btn btn-outline-danger btn-sm ms-auto", type: "button", onclick: () => onCancel(meta.id) }, icon("stop-fill"), " Cancel")
     : h("div", { class: "btn-group btn-group-sm ms-auto" }, h("button", { class: "btn btn-outline-secondary", type: "button", disabled: !meta.result, onclick: () => onCopy(meta) }, icon("clipboard"), " Copy"), h("button", { class: "btn btn-outline-secondary", type: "button", disabled: !meta.result, onclick: () => onDownload(meta) }, icon("download"), " .md"));
   const header = h("div", { class: "card-header d-flex flex-wrap align-items-center gap-2" }, icon("stars"), h("span", { class: "fw-semibold" }, shortModel(meta.model)), statusBadge(meta.status), h("span", { class: "small text-body-secondary" }, when(meta.created_at)), actions);
-  const body = h("div", { class: "card-body" }, legend(meta, runLabel), stats(meta, progress), meta.error ? h("div", { class: "alert alert-danger py-1 px-2 small" }, icon("exclamation-triangle"), ` ${meta.error}`) : null, report(meta, running), promptsSent(meta, promptsOpen, onPromptsToggle));
+  const body = h("div", { class: "card-body" }, legend(meta, runLabel), stats(meta, progress), meta.error ? h("div", { class: "alert alert-danger py-1 px-2 small" }, icon("exclamation-triangle"), ` ${meta.error}`) : null, report(meta, running), promptsSent(meta, loadPrompts, promptsOpen, onPromptsToggle));
   return h("div", { class: "card shadow-sm analysis-card" }, header, body);
 }
 
@@ -57,11 +58,11 @@ function markdownOrText(meta) {
   }
 }
 
-function promptsSent(meta, open, onToggle) {
+function promptsSent(meta, loadPrompts, open, onToggle) {
   const details = h("details", { class: "mt-3 small", open }, h("summary", { class: "text-body-secondary" }, icon("file-earmark-text"), " Prompts sent to the analyst"));
   let filled = false;
   const fill = () => {
-    if (details.open && !filled) fillPrompts(details, meta);
+    if (details.open && !filled) fillPrompts(details, loadPrompts(meta.id));
     filled ||= details.open;
   };
   details.addEventListener("toggle", () => {
@@ -72,9 +73,14 @@ function promptsSent(meta, open, onToggle) {
   return details;
 }
 
-function fillPrompts(details, meta) {
+function fillPrompts(details, pending) {
   const block = (title, text) => [h("div", { class: "fw-semibold mt-2" }, title), h("pre", { class: "md-code prompt-sent" }, text)];
-  details.append(...block("System", meta.system_prompt ?? ""), ...block("User", meta.user_prompt ?? ""));
+  const target = h("div", {}, h("p", { class: "text-body-secondary mt-2 mb-0" }, "Loading…"));
+  details.append(target);
+  pending.then(
+    (prompts) => target.replaceChildren(...block("System", prompts.system_prompt), ...block("User", prompts.user_prompt)),
+    (error) => target.replaceChildren(h("p", { class: "text-danger mt-2 mb-0" }, error.message)),
+  );
 }
 
 export function historyTable(views, { selectedId, onSelect }) {

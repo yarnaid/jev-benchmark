@@ -101,7 +101,10 @@ def test_create_analysis_runs_in_the_background(make_app: AppFactory) -> None:
     assert final["meta"]["status"] == "completed"
     assert final["meta"]["result"].startswith("## Executive summary")
     assert final["meta"]["email_refs"]["e001"].endswith(".0001")
-    assert [name for name in PLACEHOLDERS if f"${name}" in final["meta"]["user_prompt"]] == []
+    assert {"user_prompt", "system_prompt"}.isdisjoint(final["meta"])
+    prompts = client.get(f"/api/analyses/{created['id']}/prompts").json()
+    assert prompts["system_prompt"].startswith("Analyse.")
+    assert [name for name in PLACEHOLDERS if f"${name}" in prompts["user_prompt"]] == []
     listed = client.get("/api/analyses").json()
     assert [view["meta"]["id"] for view in listed] == [created["id"]]
     assert "result" not in listed[0]["meta"]
@@ -127,6 +130,7 @@ def test_create_analysis_with_an_invalid_request_is_400(make_app: AppFactory) ->
     ("method", "path"),
     [
         pytest.param("GET", f"/api/analyses/{_MISSING}", id="get"),
+        pytest.param("GET", f"/api/analyses/{_MISSING}/prompts", id="prompts"),
         pytest.param("POST", f"/api/analyses/{_MISSING}/cancel", id="cancel"),
         pytest.param("GET", "/api/analyses/..%2Fetc", id="unsafe-id"),
     ],
