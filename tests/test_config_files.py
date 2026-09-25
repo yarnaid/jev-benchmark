@@ -3,6 +3,7 @@
 from datetime import UTC, datetime
 from pathlib import Path
 
+from jev_bench.analysis.config import PLACEHOLDERS, load_analysis_config
 from jev_bench.benchmark_config import load_benchmark_config
 from jev_bench.generation.config import load_generation_config
 from jev_bench.generation.plan import build_plan, resolve_traits
@@ -85,3 +86,11 @@ def test_shipped_generation_config() -> None:
     system, user = render_prompts(config, traits, plan[0], questions)
     assert "$" not in system + user
     assert plan[0].sent_at.isoformat() in user
+
+
+def test_shipped_analysis_config() -> None:
+    config = load_analysis_config(CONFIG_DIR / "analysis.toml")
+    assert config.default_model == "anthropic/claude-sonnet-5"
+    assert (config.max_disputed_emails, config.max_output_tokens) == (12, 8000)
+    assert all(f"${name}" in config.user_prompt for name in PLACEHOLDERS)
+    assert "untrusted" in config.system_prompt
