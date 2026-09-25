@@ -15,7 +15,9 @@ Functions:
     services_of: typed access to a TestClient's app.state.services.
     poll: GET a path repeatedly until a predicate on its JSON body holds, or fail.
 Constants:
-    MINI_QUESTIONS_TOML, MINI_BENCHMARK_TOML, MINI_GENERATION_TOML: mini config file contents.
+    MINI_QUESTIONS_TOML, MINI_BENCHMARK_TOML, MINI_GENERATION_TOML: mini config file contents
+        (the mini question set has a multi-label "topics" question with threshold 0.75; the fake
+        chat answer puts "meeting" exactly at 0.75 * max, the fake Jev answer below it).
     CHAT_PARAMETERS: the fake catalog's supported_parameters for chat models (like the real
         Claude Sonnet 5 / GPT-5.6 Terra entries: no `temperature`).
 Types:
@@ -69,7 +71,12 @@ class EmailFactory(Factory[Email]):
     generator_model = "google/gemini-3.8-flash"
     traits = LazyFunction(dict)
     reference_answers = LazyFunction(
-        lambda: {"category": "spam", "urgency": "today", "needs_reply": "yes"}
+        lambda: {
+            "category": "spam",
+            "urgency": "today",
+            "needs_reply": "yes",
+            "topics": ["billing", "meeting"],
+        }
     )
 
 
@@ -148,6 +155,17 @@ instructions = "Needs a reply?"
 [questions.options]
 yes = "Reply expected"
 no = "No reply expected"
+
+[[questions]]
+id = "topics"
+type = "multi"
+instructions = "Which topics?"
+threshold = 0.75
+
+[questions.options]
+billing = "About money"
+meeting = "About a meeting"
+travel = "About a trip"
 """
 
 MINI_BENCHMARK_TOML = """
@@ -232,7 +250,12 @@ def generator_output(category: str = "spam") -> str:
                 "subject": "You won a prize",
                 "body": "Claim it now.",
             },
-            "answers": {"category": category, "urgency": "now", "needs_reply": "no"},
+            "answers": {
+                "category": category,
+                "urgency": "now",
+                "needs_reply": "no",
+                "topics": ["billing"],
+            },
         }
     )
 
@@ -241,6 +264,7 @@ CHAT_ANSWER: dict[str, Any] = {
     "category": {"spam": 0.7, "personal": 0.2, "work": 0.1},
     "urgency": {"low": 0.1, "today": 0.3, "now": 0.6},
     "needs_reply": 0.2,
+    "topics": {"billing": 0.5, "meeting": 0.375, "travel": 0.125},
 }
 JEV_ANSWERS: dict[str, Any] = {
     "category": {
@@ -254,6 +278,11 @@ JEV_ANSWERS: dict[str, Any] = {
         "probabilities": {"0": 0.05, "1": 0.1, "2": 0.85},
     },
     "needs_reply": {"type": "noul", "noul": 0.15},
+    "topics": {
+        "type": "choice",
+        "choice": "billing",
+        "probabilities": {"billing": 0.7, "meeting": 0.2, "travel": 0.1},
+    },
 }
 CHAT_PARAMETERS = ("max_tokens", "reasoning", "response_format", "structured_outputs")
 _CATALOG: dict[str, list[dict[str, Any]]] = {

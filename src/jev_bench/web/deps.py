@@ -4,6 +4,7 @@ Constants:
     NO_KEY_DETAIL
 Types:
     ServicesDep, ApiKeyDep
+    ThresholdQuery: optional `?threshold=` in (0, 1] (422 otherwise, NaN and infinity included).
 Functions:
     get_services: Services stored on the app by the lifespan.
     require_api_key: server key, else the X-OpenRouter-Key header, else HTTP 400.
@@ -12,7 +13,7 @@ Functions:
 
 from typing import Annotated
 
-from fastapi import Depends, Header, HTTPException, Request
+from fastapi import Depends, Header, HTTPException, Query, Request
 
 from jev_bench.services import Services
 
@@ -20,6 +21,7 @@ __all__ = [
     "NO_KEY_DETAIL",
     "ApiKeyDep",
     "ServicesDep",
+    "ThresholdQuery",
     "get_services",
     "require_api_key",
     "split_ids",
@@ -48,6 +50,7 @@ def require_api_key(
 
 
 ApiKeyDep = Annotated[str, Depends(require_api_key)]
+ThresholdQuery = Annotated[float | None, Query(gt=0.0, le=1.0, allow_inf_nan=False)]
 
 
 def split_ids(value: str | None) -> list[str]:

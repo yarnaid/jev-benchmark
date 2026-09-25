@@ -53,3 +53,10 @@ def test_reads_without_files_are_empty(tmp_path: Path) -> None:
 async def test_invalid_email_ids_raise_key_error(tmp_path: Path, email_id: str) -> None:
     with pytest.raises(KeyError):
         await LabelStore(tmp_path).update(email_id, {"category": "spam"})
+
+
+async def test_update_stores_label_lists(tmp_path: Path) -> None:
+    store = LabelStore(tmp_path)
+    labels = {"topics": ["billing", "meeting"], "category": "spam"}
+    assert await store.update(_E1, labels) == labels
+    assert LabelStore(tmp_path).for_email(_E1) == labels

@@ -4,7 +4,7 @@ Classes:
     EmailList: current question set + rows.
     EmailDetail: email, human labels, predictions per run, run labels, current question set.
 Functions:
-    list_emails: GET /emails?generations=…&runs=…
+    list_emails: GET /emails?generations=…&runs=…[&threshold=0.8]
     email_detail: GET /emails/{email_id}?runs=…
 """
 
@@ -13,10 +13,10 @@ from pydantic import BaseModel
 
 from jev_bench.compare import EmailRow, email_rows, run_label
 from jev_bench.emails import Email
-from jev_bench.questions import QuestionSet
+from jev_bench.questions import HardAnswer, QuestionSet
 from jev_bench.services import Services
 from jev_bench.store.runs import Prediction
-from jev_bench.web.deps import ServicesDep, split_ids
+from jev_bench.web.deps import ServicesDep, ThresholdQuery, split_ids
 from jev_bench.web.loaders import load_email, load_emails, load_runs, run_raters
 
 __all__ = [
@@ -37,20 +37,26 @@ class EmailList(BaseModel):
 
 class EmailDetail(BaseModel):
     email: Email
-    human: dict[str, str]
+    human: dict[str, HardAnswer]
     predictions: dict[str, Prediction]
     run_labels: dict[str, str]
     questions: QuestionSet
 
 
 @router.get("/emails")
-def list_emails(services: ServicesDep, generations: str, runs: str | None = None) -> EmailList:
+def list_emails(
+    services: ServicesDep,
+    generations: str,
+    runs: str | None = None,
+    threshold: ThresholdQuery = None,
+) -> EmailList:
     generation_ids = split_ids(generations)
     questions = services.question_set()
     emails = load_emails(services, generation_ids)
     raters = run_raters(services, load_runs(services, split_ids(runs)))
     labels = services.labels.for_generations(generation_ids)
-    return EmailList(questions=questions, rows=email_rows(emails, raters, labels, questions))
+    rows = email_rows(emails, raters, labels, questions, threshold=threshold)
+    return EmailList(questions=questions, rows=rows)
 
 
 @router.get("/emails/{email_id}")

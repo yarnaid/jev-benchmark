@@ -1,5 +1,6 @@
 """Tests for jev_bench.web.routes.emails."""
 
+import pytest
 from tests.factories import (
     AppFactory,
     EmailFactory,
@@ -68,3 +69,21 @@ def test_unknown_emails_and_generations_are_404(make_app: AppFactory) -> None:
     assert missing.status_code == 404
     assert client.get("/api/emails/20260924-100000-missing-0001.0001").status_code == 404
     assert client.get("/api/emails/not-an-id").status_code == 404
+
+
+def test_list_emails_multi_labels_scores_and_threshold(make_app: AppFactory) -> None:
+    client = make_app(FakeOpenRouter(), api_key="sk-server")
+    generation_id = seed_generation(services_of(client))
+    run_id = client.post(
+        "/api/runs", json={"column": "anthropic", "generation_ids": [generation_id]}
+    ).json()["meta"]["id"]
+    poll(client, f"/api/runs/{run_id}", until=lambda body: body["meta"]["status"] != "running")
+    params = {"generations": generation_id, "runs": run_id}
+    row = client.get("/api/emails", params=params).json()["rows"][0]
+    assert row["top"][run_id]["topics"] == ["billing", "meeting"]
+    assert row["reference"]["topics"] == ["billing", "meeting"]
+    assert row["scores"][run_id]["urgency"] == pytest.approx(75.0)
+    assert row["reference_scores"] == {"urgency": 50.0}
+    strict = client.get("/api/emails", params={**params, "threshold": 0.8}).json()["rows"][0]
+    assert strict["top"][run_id]["topics"] == ["billing"]
+    assert client.get("/api/emails", params={**params, "threshold": 0}).status_code == 422

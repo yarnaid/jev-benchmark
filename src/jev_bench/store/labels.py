@@ -1,4 +1,5 @@
-"""Human labels per generation: `{email_id: {question_id: option_id}}`, edited atomically.
+"""Human labels per generation: `{email_id: {question_id: option_id | [option_id, ...]}}`, edited
+atomically (a list is the answer to a multi-label question).
 
 Classes:
     LabelStore: read labels per email or generation; apply edits under a lock.
@@ -9,6 +10,7 @@ from collections.abc import Iterable, Mapping
 from pathlib import Path
 
 from jev_bench.ids import is_safe_id, split_email_id
+from jev_bench.questions import HardAnswer
 from jev_bench.store.jsonfiles import read_json, write_json_atomic
 
 __all__ = [
@@ -16,7 +18,7 @@ __all__ = [
     "Labels",
 ]
 
-type Labels = dict[str, dict[str, str]]
+type Labels = dict[str, dict[str, HardAnswer]]
 
 
 class LabelStore:
@@ -30,11 +32,13 @@ class LabelStore:
             merged.update(self._read(generation_id))
         return merged
 
-    def for_email(self, email_id: str) -> dict[str, str]:
+    def for_email(self, email_id: str) -> dict[str, HardAnswer]:
         generation_id, _ = split_email_id(email_id)
         return self._read(generation_id).get(email_id, {})
 
-    async def update(self, email_id: str, changes: Mapping[str, str | None]) -> dict[str, str]:
+    async def update(
+        self, email_id: str, changes: Mapping[str, HardAnswer | None]
+    ) -> dict[str, HardAnswer]:
         generation_id, _ = split_email_id(email_id)
         async with self._lock:
             labels = self._read(generation_id)
@@ -56,7 +60,9 @@ class LabelStore:
         return self._root / f"{generation_id}.json"
 
 
-def _apply(current: Mapping[str, str], changes: Mapping[str, str | None]) -> dict[str, str]:
+def _apply(
+    current: Mapping[str, HardAnswer], changes: Mapping[str, HardAnswer | None]
+) -> dict[str, HardAnswer]:
     updated = dict(current)
     for question_id, option in changes.items():
         if option is None:
