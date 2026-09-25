@@ -9,13 +9,15 @@ Classes:
     RequestResult: outcomes of one request plus its usage, latency and raw body.
     Classifier: protocol implemented by every column kind.
 Functions:
-    usage_from_body: OpenRouter `usage` (key style agnostic) -> Usage with estimates.
+    usage_from_body: OpenRouter `usage` (key style agnostic) -> Usage with estimates. For a BYOK
+        request (`is_byok`) OpenRouter's `cost` is only its own fee, so the provider-billed
+        `cost_details.upstream_inference_cost` is added.
     failed_result: RequestResult in which every email carries the same error.
     outcome_from_parsed: parsed answers + notes -> EmailOutcome (error when nothing parsed).
 """
 
 from collections.abc import Callable, Mapping, Sequence
-from typing import Any, Protocol
+from typing import Any, Protocol, TypeIs
 
 from pydantic import BaseModel, Field
 
@@ -107,8 +109,9 @@ def usage_from_body(usage: object, pricing: ModelInfo | None) -> Usage:
     input_tokens = _count(raw, "input_tokens", "prompt_tokens")
     output_tokens = _count(raw, "output_tokens", "completion_tokens")
     cost = raw.get("cost")
-    if isinstance(cost, int | float) and not isinstance(cost, bool):
-        return Usage(input_tokens=input_tokens, output_tokens=output_tokens, cost=float(cost))
+    if _is_number(cost):
+        total = float(cost) + _byok_upstream_cost(raw)
+        return Usage(input_tokens=input_tokens, output_tokens=output_tokens, cost=total)
     estimate = pricing.estimate_cost(input_tokens, output_tokens) if pricing else 0.0
     return Usage(
         input_tokens=input_tokens,
@@ -116,6 +119,18 @@ def usage_from_body(usage: object, pricing: ModelInfo | None) -> Usage:
         cost=estimate,
         cost_estimated=True,
     )
+
+
+def _byok_upstream_cost(raw: Mapping[str, Any]) -> float:
+    if raw.get("is_byok") is not True:
+        return 0.0
+    details = raw.get("cost_details")
+    upstream = details.get("upstream_inference_cost") if isinstance(details, Mapping) else None
+    return float(upstream) if _is_number(upstream) else 0.0
+
+
+def _is_number(value: object) -> TypeIs[int | float]:
+    return isinstance(value, int | float) and not isinstance(value, bool)
 
 
 def _count(raw: Mapping[str, Any], *keys: str) -> int:

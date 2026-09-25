@@ -38,6 +38,46 @@ _PRICED = ModelInfo(id="m", name="m", prompt_price=0.001, completion_price=0.002
             Usage(input_tokens=10, cost=0.01, cost_estimated=True),
             id="missing-cost-estimated",
         ),
+        pytest.param(
+            {
+                "prompt_tokens": 4059,
+                "completion_tokens": 330,
+                "cost": 0,
+                "is_byok": True,
+                "cost_details": {"upstream_inference_cost": 0.01318},
+            },
+            _PRICED,
+            Usage(input_tokens=4059, output_tokens=330, cost=0.01318),
+            id="byok-upstream-cost-is-added",
+        ),
+        pytest.param(
+            {
+                "prompt_tokens": 1,
+                "cost": 0.0005,
+                "is_byok": True,
+                "cost_details": {"upstream_inference_cost": 0.01},
+            },
+            None,
+            Usage(input_tokens=1, cost=0.0105),
+            id="byok-fee-plus-upstream",
+        ),
+        pytest.param(
+            {"prompt_tokens": 1, "cost": 0.002, "cost_details": {"upstream_inference_cost": 0.002}},
+            None,
+            Usage(input_tokens=1, cost=0.002),
+            id="not-byok-upstream-not-double-counted",
+        ),
+        pytest.param(
+            {
+                "prompt_tokens": 1,
+                "cost": 0,
+                "is_byok": True,
+                "cost_details": {"upstream_inference_cost": "x"},
+            },
+            None,
+            Usage(input_tokens=1, cost=0.0),
+            id="byok-garbage-upstream-ignored",
+        ),
         pytest.param(None, None, Usage(cost_estimated=True), id="no-usage-no-pricing"),
         pytest.param(
             {"prompt_tokens": 3, "cost": True},
