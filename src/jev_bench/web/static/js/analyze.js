@@ -65,10 +65,14 @@ const runLabel = (id) => {
 };
 
 function renderPickers() {
-  const latest = h("button", { class: "btn btn-sm btn-outline-secondary", type: "button", title: "Analyse the latest completed run of every column", disabled: !state.explicit, onclick: resetRuns }, icon("arrow-counterclockwise"), " Latest");
   const generations = checklist({ label: "Generations", items: generationChoices(state.generations), selected: state.selected, onChange: onGenerations });
-  const runs = checklist({ label: "Runs", items: runChoices(state.runs, state.selected, state.catalog), selected: state.chosen, onChange: onRuns });
-  clear(document.getElementById("pickers"), generations, runs, latest);
+  clear(document.getElementById("pickers"), generations, h("div", { class: "d-flex flex-wrap gap-2", id: "run-picker" }));
+  renderRunPicker();
+}
+
+function renderRunPicker() {
+  const latest = h("button", { class: "btn btn-sm btn-outline-secondary", type: "button", id: "latest-runs", title: "Analyse the latest completed run of every column", disabled: !state.explicit, onclick: resetRuns }, icon("arrow-counterclockwise"), " Latest");
+  clear(document.getElementById("run-picker"), checklist({ label: "Runs", items: runChoices(state.runs, state.selected, state.catalog), selected: state.chosen, onChange: onRuns }), latest);
 }
 
 function onGenerations(selected) {
@@ -81,7 +85,7 @@ function onRuns(chosen) {
   state.chosen = chosen;
   state.explicit = true;
   syncUrl();
-  renderPickers();
+  document.getElementById("latest-runs").disabled = false;
   scheduleEstimate();
 }
 
@@ -89,7 +93,7 @@ function resetRuns() {
   state.explicit = false;
   state.chosen = defaultRuns();
   syncUrl();
-  renderPickers();
+  renderRunPicker();
   scheduleEstimate();
 }
 

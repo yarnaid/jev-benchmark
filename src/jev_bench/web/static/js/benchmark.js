@@ -58,12 +58,14 @@ async function main() {
 const defaultRuns = () => defaultRunIds(state.runs, state.selected, state.catalog);
 
 function renderPickers() {
-  const generations = generationChoices(state.generations);
-  const latest = h("button", { class: "btn btn-sm btn-outline-secondary", type: "button", title: "Compare the latest completed run of every column", disabled: !state.explicit, onclick: resetRuns }, icon("arrow-counterclockwise"), " Latest");
-  clear(
-    document.getElementById("generation-picker"),
-    h("div", { class: "d-flex flex-wrap gap-2" }, checklist({ label: "Generations", items: generations, selected: state.selected, onChange: onGenerations }), checklist({ label: "Runs", items: runChoices(state.runs, state.selected, state.catalog), selected: state.chosen, onChange: onRuns }), latest),
-  );
+  const generations = checklist({ label: "Generations", items: generationChoices(state.generations), selected: state.selected, onChange: onGenerations });
+  clear(document.getElementById("generation-picker"), h("div", { class: "d-flex flex-wrap gap-2" }, generations, h("div", { class: "d-flex flex-wrap gap-2", id: "run-picker" })));
+  renderRunPicker();
+}
+
+function renderRunPicker() {
+  const latest = h("button", { class: "btn btn-sm btn-outline-secondary", type: "button", id: "latest-runs", title: "Compare the latest completed run of every column", disabled: !state.explicit, onclick: resetRuns }, icon("arrow-counterclockwise"), " Latest");
+  clear(document.getElementById("run-picker"), checklist({ label: "Runs", items: runChoices(state.runs, state.selected, state.catalog), selected: state.chosen, onChange: onRuns }), latest);
 }
 
 function onGenerations(selected) {
@@ -80,7 +82,7 @@ function onRuns(chosen) {
   state.chosen = chosen;
   state.explicit = true;
   syncUrl();
-  renderPickers();
+  document.getElementById("latest-runs").disabled = false;
   refreshComparison().catch(toastError);
 }
 
@@ -88,7 +90,7 @@ function resetRuns() {
   state.explicit = false;
   state.chosen = defaultRuns();
   syncUrl();
-  renderPickers();
+  renderRunPicker();
   refreshComparison().catch(toastError);
 }
 
@@ -214,7 +216,7 @@ async function poll(runId) {
 function runFinished(meta) {
   const column = state.catalog.find((item) => item.id === meta.column);
   if (column) scheduleEstimate(column);
-  if (state.explicit) return renderPickers();
+  if (state.explicit) return renderRunPicker();
   resetRuns();
 }
 
