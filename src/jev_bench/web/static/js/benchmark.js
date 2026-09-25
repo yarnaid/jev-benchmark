@@ -10,11 +10,10 @@
 import { api } from "./api.js";
 import { columnCard, estimateBlock, statsBlock } from "./column-card.js";
 import { clear, h, icon } from "./dom.js";
-import { shortModel, when } from "./format.js";
 import { initLayout, startJob, THEME_EVENT, toastError } from "./layout.js";
 import { hideTooltips } from "./glossary.js";
 import { renderReport } from "./report.js";
-import { latestCompletedPerColumn, sameSet } from "./selection.js";
+import { defaultRunIds, generationChoices, initialGenerations, orderByColumn, runChoices, sameSet } from "./selection.js";
 import { readPref, writePref } from "./storage.js";
 import { checklist, emptyState, thresholdSlider } from "./widgets.js";
 
@@ -38,7 +37,6 @@ const state = {
 const selectedSet = () => new Set(state.selected);
 const modelOf = (column) => readPref(`benchmark.model.${column.id}`, column.default_model);
 const modeOf = (column) => readPref(`benchmark.mode.${column.id}`, "per_email");
-const columnIndex = (run) => state.catalog.findIndex((column) => column.id === run.column);
 
 async function main() {
   await initLayout();
@@ -47,7 +45,7 @@ async function main() {
   state.catalog = catalog;
   state.generations = generations.map((view) => view.meta).filter((meta) => meta.done > 0);
   state.runs = runs.map((view) => view.meta);
-  state.selected = initialSelection(requested);
+  state.selected = initialGenerations(state.generations, state.runs, requested, readPref("benchmark.generations", []));
   state.explicit = requested.length > 0;
   state.chosen = state.explicit ? requested : defaultRuns();
   renderPickers();
@@ -57,33 +55,14 @@ async function main() {
   await refreshComparison();
 }
 
-function initialSelection(requested) {
-  const pinned = state.runs.find((run) => requested.includes(run.id));
-  if (pinned) return [...pinned.generation_ids];
-  const known = new Set(state.generations.map((generation) => generation.id));
-  const stored = (readPref("benchmark.generations", []) ?? []).filter((id) => known.has(id));
-  return stored.length ? stored : state.generations.slice(0, 1).map((generation) => generation.id);
-}
-
-function defaultRuns() {
-  const ids = new Set(latestCompletedPerColumn(state.runs, state.selected));
-  return state.runs.filter((run) => ids.has(run.id)).sort((a, b) => columnIndex(a) - columnIndex(b)).map((run) => run.id);
-}
-
-function runItems() {
-  const selected = selectedSet();
-  const title = (run) => state.catalog.find((column) => column.id === run.column)?.title ?? run.column;
-  return state.runs
-    .filter((run) => run.status === "completed" && sameSet(run.generation_ids, selected))
-    .map((run) => ({ value: run.id, text: `${title(run)} · ${shortModel(run.model)}${run.mode === "all_in_one" ? " · all in one" : ""}`, hint: `${when(run.created_at)} · ${run.n_done} emails` }));
-}
+const defaultRuns = () => defaultRunIds(state.runs, state.selected, state.catalog);
 
 function renderPickers() {
-  const generations = state.generations.map((generation) => ({ value: generation.id, text: `${generation.name} · ${generation.done} emails`, hint: `${generation.id} · ${generation.status}` }));
+  const generations = generationChoices(state.generations);
   const latest = h("button", { class: "btn btn-sm btn-outline-secondary", type: "button", title: "Compare the latest completed run of every column", disabled: !state.explicit, onclick: resetRuns }, icon("arrow-counterclockwise"), " Latest");
   clear(
     document.getElementById("generation-picker"),
-    h("div", { class: "d-flex flex-wrap gap-2" }, checklist({ label: "Generations", items: generations, selected: state.selected, onChange: onGenerations }), checklist({ label: "Runs", items: runItems(), selected: state.chosen, onChange: onRuns }), latest),
+    h("div", { class: "d-flex flex-wrap gap-2" }, checklist({ label: "Generations", items: generations, selected: state.selected, onChange: onGenerations }), checklist({ label: "Runs", items: runChoices(state.runs, state.selected, state.catalog), selected: state.chosen, onChange: onRuns }), latest),
   );
 }
 
@@ -252,8 +231,8 @@ window.addEventListener("pageshow", (event) => {
 
 async function refreshComparison() {
   const container = document.getElementById("comparison");
-  const known = new Map(state.runs.map((run) => [run.id, run]));
-  const runIds = state.chosen.filter((id) => known.has(id)).sort((a, b) => columnIndex(known.get(a)) - columnIndex(known.get(b)));
+  const known = new Set(state.runs.map((run) => run.id));
+  const runIds = orderByColumn(state.chosen.filter((id) => known.has(id)), state.runs, state.catalog);
   if (!runIds.length) {
     state.report = null;
     clear(container, emptyState("Run at least one column on the selected generations, or pick runs, to see the comparison.", "bar-chart"));
