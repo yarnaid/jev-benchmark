@@ -20,6 +20,7 @@ Question model v2 (multi-label category, 0–100 scores, new questions): spec
 ## Commands
 
 ```bash
+./run.sh [jev-bench args]                 # bootstrap uv + Python, then jev-bench (default: serve)
 uv sync                                   # install (Python >= 3.14)
 uv run jev-bench serve                    # UI + API on http://127.0.0.1:8000
 uv run jev-bench generate --count 200     # new generation (needs OPENROUTER_API_KEY in env/.env)
