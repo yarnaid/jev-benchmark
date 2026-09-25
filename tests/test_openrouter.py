@@ -85,8 +85,10 @@ _OPENAI_401 = json.dumps(
     [
         pytest.param(
             _json(401, {"error": {"code": 401, "message": f"HTTP 401: {_OPENAI_401}"}}),
-            "HTTP 401: Incorrect API key provided: sk-proj-…Jjkr. See the docs.",
-            id="nested-upstream-error-is-unwrapped-and-masked",
+            "HTTP 401: Incorrect API key provided: sk-proj-…Jjkr. See the docs. — "
+            "the upstream provider rejected the key saved for it in your OpenRouter account "
+            "(BYOK); update or remove it in OpenRouter's settings",
+            id="nested-upstream-401-is-unwrapped-masked-and-explained",
         ),
         pytest.param(
             _json(

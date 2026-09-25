@@ -7,7 +7,8 @@ Constants:
 Classes:
     OpenRouterError: HTTP / protocol failure with `status`, `retryable` and `fatal`. Its message
         unwraps an upstream provider's nested error, names the provider when OpenRouter reports
-        it, and masks any `sk-…` key fragment (keeping the last four characters).
+        it, explains a nested 401/403 (the upstream rejected a BYOK key stored in the OpenRouter
+        account, not the OpenRouter key), and masks any `sk-…` key fragment (last four kept).
     ChatContentError: a chat completion carries no usable assistant content.
     ApiResponse: parsed JSON body plus client-observed latency.
     OpenRouterClient: per-call API keys over one shared `httpx2.AsyncClient`.
@@ -55,6 +56,11 @@ _FENCE = re.compile(r"^```[A-Za-z0-9_-]*\s*(.*?)\s*```$", re.DOTALL)
 _NESTED_ERROR = re.compile(r"^HTTP \d{3}: (\{.*\})$", re.DOTALL)
 _KEY = re.compile(r"\bsk-[A-Za-z0-9*_-]{12,}")
 _KEY_PREFIX = re.compile(r"sk-(?:[a-z0-9]+-){0,2}")
+_UPSTREAM_KEY_STATUSES: frozenset[int] = frozenset({401, 403})
+_BYOK_HINT = (
+    " — the upstream provider rejected the key saved for it in your OpenRouter account (BYOK);"
+    " update or remove it in OpenRouter's settings"
+)
 
 
 class OpenRouterError(Exception):
@@ -248,14 +254,17 @@ def _error_message(response: httpx2.Response) -> str:
     error = payload.get("error") if isinstance(payload, dict) else None
     if not isinstance(error, dict):
         return _mask_keys(response.text[:500])
-    return _provider_message(error)
+    return _provider_message(error, response.status_code)
 
 
-def _provider_message(error: Mapping[str, Any]) -> str:
-    message = _unwrap_nested(str(error.get("message") or error))
+def _provider_message(error: Mapping[str, Any], status: int | None) -> str:
+    raw = str(error.get("message") or error)
+    message = _unwrap_nested(raw)
     metadata = error.get("metadata")
     provider = metadata.get("provider_name") if isinstance(metadata, dict) else None
     text = f"{provider}: {message}" if isinstance(provider, str) and provider else message
+    if message != raw and status in _UPSTREAM_KEY_STATUSES:
+        text += _BYOK_HINT
     return _mask_keys(text)
 
 
@@ -303,7 +312,7 @@ def _raise_embedded_error(payload: Mapping[str, Any]) -> None:
     code = error.get("code")
     status = code if isinstance(code, int) and not isinstance(code, bool) else None
     raise OpenRouterError(
-        f"provider error: {_provider_message(error)}",
+        f"provider error: {_provider_message(error, status)}",
         status=status,
         retryable=status is None or status in RETRY_STATUSES,
     )
