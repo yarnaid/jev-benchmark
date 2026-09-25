@@ -1,12 +1,16 @@
 """Full per-question comparison report: per-rater stats, pairwise metrics, Fleiss' kappa.
 
 Classes:
-    RaterStats: per-rater summary for one question (argmax counts, means, entropy).
-    QuestionReport: one question's rater stats, pairs, Fleiss' kappa and skipped raters.
+    RaterStats: per-rater summary for one question (argmax counts, means, entropy, confidence; the
+        0-100 mean score of a score question; applied-label counts and labels per email of a multi
+        question).
+    QuestionReport: one question's rater stats, pairs, Fleiss' kappa (the macro Fleiss' kappa over
+        applied labels for a multi question), skipped raters and the threshold used (multi only).
     RaterSummary: one rater's identity and item count, with its RunMeta if it is a run.
     ComparisonReport: the full report (rater summaries, per-question reports, warnings).
 Functions:
-    compare: full per-question report for a set of raters against a base question set.
+    compare: full per-question report for a set of raters against a base question set;
+        `threshold` overrides every multi question's own threshold.
 """
 
 from collections.abc import Callable, Mapping, Sequence
@@ -16,6 +20,7 @@ from typing import Literal
 import numpy as np
 from pydantic import BaseModel
 
+from jev_bench.compare.multi import multi_fleiss, multi_rater_values
 from jev_bench.compare.pairs import (
     PairStats,
     RaterMatrix,
@@ -26,8 +31,15 @@ from jev_bench.compare.pairs import (
 )
 from jev_bench.compare.raters import Rater, RaterKind
 from jev_bench.metrics.agreement import fleiss_kappa
-from jev_bench.metrics.distributions import IntArray, argmax_labels, entropy, expected_level
-from jev_bench.questions import AnyQuestion, QuestionSet
+from jev_bench.metrics.distributions import (
+    FloatArray,
+    IntArray,
+    argmax_labels,
+    entropy,
+    expected_level,
+    score_0_100,
+)
+from jev_bench.questions import AnyQuestion, MultiQuestion, QuestionSet, with_threshold
 from jev_bench.store.runs import RunMeta
 
 __all__ = [
@@ -47,6 +59,9 @@ class RaterStats(BaseModel):
     mean_entropy: float
     mean_confidence: float
     mean_level: float | None = None
+    mean_score: float | None = None
+    label_counts: dict[str, int] | None = None
+    mean_labels: float | None = None
 
 
 class QuestionReport(BaseModel):
@@ -57,6 +72,7 @@ class QuestionReport(BaseModel):
     pairs: list[PairStats]
     fleiss_kappa: float | None
     skipped: list[str]
+    threshold: float | None = None
 
 
 class RaterSummary(BaseModel):
@@ -80,13 +96,14 @@ def compare(
     resamples: int = 1000,
     seed: int = 0,
     runs: Mapping[str, RunMeta] | None = None,
+    threshold: float | None = None,
 ) -> ComparisonReport:
     warnings: list[str] = []
     index_for = resample_index_cache(resamples, seed)
     fleiss_gaps: dict[str, list[str]] = {}
     questions = [
         _question_report(question, raters, index_for, warnings, fleiss_gaps)
-        for question in base.questions
+        for question in with_threshold(base, threshold).questions
     ]
     warnings.extend(_fleiss_gap_warning(rater_id, ids) for rater_id, ids in fleiss_gaps.items())
     for rater in raters:
@@ -140,6 +157,7 @@ def _question_report(
             [rater for rater in usable if rater.kind == "run"], matrices, question, fleiss_gaps
         ),
         skipped=skipped,
+        threshold=question.threshold if isinstance(question, MultiQuestion) else None,
     )
 
 
@@ -158,7 +176,8 @@ def _rater_stats(rater_id: str, rm: RaterMatrix, question: AnyQuestion) -> Rater
     options = question.option_ids
     matrix = rm.matrix
     counts = np.bincount(argmax_labels(matrix), minlength=len(options))
-    return RaterStats(
+    is_score = question.type == "score"
+    stats = RaterStats(
         rater=rater_id,
         n=len(rm.positions),
         argmax_counts={option: int(count) for option, count in zip(options, counts, strict=True)},
@@ -167,8 +186,12 @@ def _rater_stats(rater_id: str, rm: RaterMatrix, question: AnyQuestion) -> Rater
         },
         mean_entropy=float(entropy(matrix).mean()),
         mean_confidence=float(matrix.max(axis=1).mean()),
-        mean_level=float(expected_level(matrix).mean()) if question.type == "score" else None,
+        mean_level=float(expected_level(matrix).mean()) if is_score else None,
+        mean_score=float(score_0_100(matrix).mean()) if is_score else None,
     )
+    if isinstance(question, MultiQuestion):
+        return stats.model_copy(update=multi_rater_values(matrix, question)._asdict())
+    return stats
 
 
 def _fleiss(
@@ -186,8 +209,13 @@ def _fleiss(
     shared = sorted(set.intersection(*(set(matrices[rater.id].positions) for rater in answered)))
     if not shared:
         return None
-    labels = np.stack(
-        [argmax_labels(slice_matrix(matrices[rater.id], shared)) for rater in answered],
-        axis=1,
+    return _shared_fleiss(
+        [slice_matrix(matrices[rater.id], shared) for rater in answered], question
     )
+
+
+def _shared_fleiss(slices: Sequence[FloatArray], question: AnyQuestion) -> float | None:
+    if isinstance(question, MultiQuestion):
+        return multi_fleiss(slices, question.threshold)
+    labels = np.stack([argmax_labels(matrix) for matrix in slices], axis=1)
     return fleiss_kappa(labels, len(question.option_ids))

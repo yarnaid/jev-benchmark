@@ -6,26 +6,37 @@ without an import cycle.
 
 Classes:
     MultiPairValues: exact-set agreement, macro kappa, Jaccard and micro-F1, with bootstrap CIs.
+    MultiRaterValues: applied-label counts and labels per email.
 Functions:
     multi_pair_values: MultiPairValues for two raters' distributions over shared emails.
+    multi_rater_values: MultiRaterValues for one rater's distributions.
+    multi_fleiss: macro Fleiss' kappa of several raters' applied labels on shared emails.
 """
 
+from collections.abc import Sequence
 from typing import NamedTuple
+
+import numpy as np
 
 from jev_bench.metrics.bootstrap import percentile_ci
 from jev_bench.metrics.distributions import FloatArray, IntArray
 from jev_bench.metrics.multilabel import (
     exact_match_rows,
     jaccard_rows,
+    macro_fleiss,
     macro_kappa,
     macro_kappa_batch,
     micro_f1,
     relative_labels,
 )
+from jev_bench.questions import MultiQuestion
 
 __all__ = [
     "MultiPairValues",
+    "MultiRaterValues",
+    "multi_fleiss",
     "multi_pair_values",
+    "multi_rater_values",
 ]
 
 
@@ -53,3 +64,24 @@ def multi_pair_values(
         jaccard_ci=percentile_ci(jaccard[index].mean(axis=1)),
         f1=micro_f1(a, b),
     )
+
+
+class MultiRaterValues(NamedTuple):
+    label_counts: dict[str, int]
+    mean_labels: float
+
+
+def multi_rater_values(matrix: FloatArray, question: MultiQuestion) -> MultiRaterValues:
+    applied = relative_labels(matrix, question.threshold)
+    counts = applied.sum(axis=0)
+    return MultiRaterValues(
+        label_counts={
+            option: int(count) for option, count in zip(question.option_ids, counts, strict=True)
+        },
+        mean_labels=float(applied.sum(axis=1).mean()),
+    )
+
+
+def multi_fleiss(matrices: Sequence[FloatArray], threshold: float) -> float | None:
+    labels = np.stack([relative_labels(matrix, threshold) for matrix in matrices], axis=1)
+    return macro_fleiss(labels)

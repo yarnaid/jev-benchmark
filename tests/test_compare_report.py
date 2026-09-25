@@ -6,14 +6,24 @@ from datetime import UTC, datetime
 
 import pytest
 from pydantic import BaseModel
-from tests.compare_data import CATEGORY_A, IDS, build_answers, build_reference, build_run_a, rater
+from tests.compare_data import (
+    CATEGORY_A,
+    IDS,
+    TOPICS_A,
+    TOPICS_B,
+    build_answers,
+    build_reference,
+    build_run_a,
+    rater,
+    topics_answers,
+)
 from tests.factories import EmailFactory
 
 from jev_bench.benchmark_config import JevParams
 from jev_bench.compare.raters import Rater, reference_rater, run_rater
 from jev_bench.compare.report import ComparisonReport, compare
 from jev_bench.compare.rows import email_rows
-from jev_bench.questions import ChoiceQuestion, QuestionSet
+from jev_bench.questions import ChoiceQuestion, Distribution, QuestionSet
 from jev_bench.store.runs import Prediction, RunMeta
 
 
@@ -229,3 +239,56 @@ def test_reference_rater_warnings_are_merged_into_report(questions: QuestionSet)
     report = compare([reference], questions, resamples=5)
     assert reference.warnings
     assert reference.warnings[0] in report.warnings
+
+
+def _topics_report(questions: QuestionSet, threshold: float | None = None) -> ComparisonReport:
+    raters = [
+        rater("a", "run", topics_answers(TOPICS_A), questions),
+        rater("b", "run", topics_answers(TOPICS_B), questions),
+    ]
+    return compare(raters, questions, resamples=20, threshold=threshold)
+
+
+def test_multi_question_report(multi_questions: QuestionSet) -> None:
+    report = _topics_report(multi_questions)
+    topics = next(q for q in report.questions if q.id == "topics")
+    assert (topics.type, topics.threshold) == ("multi", 0.8)
+    stats_a = next(s for s in topics.raters if s.rater == "a")
+    assert stats_a.label_counts == {"billing": 2, "meeting": 3, "travel": 1}
+    assert stats_a.mean_labels == 1.5
+    assert stats_a.argmax_counts == {"billing": 2, "meeting": 1, "travel": 1}
+    assert stats_a.mean["meeting"] == pytest.approx(0.45)
+    assert stats_a.mean_confidence == pytest.approx((0.5 + 0.8 + 0.7 + 0.4) / 4)
+    assert topics.pairs[0].jaccard == pytest.approx(0.875)
+    assert topics.fleiss_kappa == pytest.approx(37 / 45)
+    category = next(q for q in report.questions if q.id == "category")
+    assert (category.threshold, category.raters) == (None, [])
+
+
+def test_threshold_override_is_reported_and_applied(multi_questions: QuestionSet) -> None:
+    topics = next(q for q in _topics_report(multi_questions, 0.5).questions if q.id == "topics")
+    assert topics.threshold == 0.5
+    assert topics.pairs[0].agreement == 0.5
+
+
+def test_flat_multi_answers_apply_every_label_and_stay_finite(
+    multi_questions: QuestionSet,
+) -> None:
+    third: Distribution = {"billing": 1 / 3, "meeting": 1 / 3, "travel": 1 / 3}
+    flat = {email_id: {"topics": third} for email_id in IDS}
+    raters = [rater("a", "run", flat, multi_questions), rater("b", "run", flat, multi_questions)]
+    report = compare(raters, multi_questions, resamples=20)
+    _assert_strict_json(report)
+    topics = next(q for q in report.questions if q.id == "topics")
+    pair = topics.pairs[0]
+    assert (pair.agreement, pair.jaccard, pair.f1, pair.kappa) == (1.0, 1.0, 1.0, None)
+    assert topics.fleiss_kappa is None
+    assert topics.raters[0].mean_labels == 3.0
+
+
+def test_score_questions_report_a_0_to_100_mean_score(questions: QuestionSet, run_a: Rater) -> None:
+    report = compare([run_a], questions, resamples=5)
+    urgency = next(q for q in report.questions if q.id == "urgency")
+    category = next(q for q in report.questions if q.id == "category")
+    assert urgency.raters[0].mean_score == pytest.approx(60.0)
+    assert category.raters[0].mean_score is None
