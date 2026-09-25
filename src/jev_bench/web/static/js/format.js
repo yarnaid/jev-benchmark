@@ -1,7 +1,8 @@
 /**
  * Display formatting helpers; every function returns "—" for null/undefined and for non-finite
  * numbers (NaN, ±Infinity); shortModel additionally returns "—" for any non-string input.
- * Exports: money, duration, pct, fixed, num, when, perMillion, shortModel.
+ * times(value, base) renders a ratio against a base as "×4", "×9.8" or "×0.03" ("—" without a positive base).
+ * Exports: money, duration, pct, fixed, num, when, perMillion, shortModel, times.
  */
 
 const missing = (value) =>
@@ -25,3 +26,10 @@ export const when = (iso) => (missing(iso) ? "—" : new Date(iso).toLocaleStrin
 export const perMillion = (usd) => (missing(usd) ? "—" : `$${Number(usd).toFixed(2)}`);
 export const shortModel = (id) =>
   missing(id) || typeof id !== "string" ? "—" : id.split("/").pop();
+
+export function times(value, base) {
+  if (missing(value) || missing(base) || base <= 0) return "—";
+  const ratio = value / base;
+  const shown = ratio < 0.1 ? Number(ratio.toPrecision(1)) : ratio < 10 ? Number(ratio.toFixed(1)) : Math.round(ratio);
+  return `×${shown}`;
+}

@@ -1,7 +1,9 @@
 /**
  * Plain-language descriptions of every metric and figure in the UI, written for a non-technical reader:
  * what it is and how to read it. The single source for the (?) tooltips and the Help page glossary.
- * Exports: GLOSSARY (groups of [key, label, text]), describe, helpIcon, withHelp.
+ * hideTooltips(root) disposes the tooltips of (?) icons inside `root` before it is re-rendered, so a
+ * tooltip that is open while its icon is removed never stays behind.
+ * Exports: GLOSSARY (groups of [key, label, text]), describe, helpIcon, hideTooltips, withHelp.
  */
 import { h, icon } from "./dom.js";
 
@@ -86,4 +88,8 @@ export function helpIcon(key) {
 
 export function withHelp(text, key) {
   return [text, " ", helpIcon(key)];
+}
+
+export function hideTooltips(root) {
+  for (const element of root.querySelectorAll('[data-bs-toggle="tooltip"]')) bootstrap.Tooltip.getInstance(element)?.dispose();
 }

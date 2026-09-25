@@ -1,56 +1,121 @@
 /**
- * Benchmark page: generation picker, one card per column (model, mode, run/cancel, live stats) and the
- * comparison of the latest completed run per column on exactly the selected generations (or ?runs=…).
- * A label-threshold slider appears in the page header when the report has a multi-label question; it is
- * rendered once (so dragging never loses focus) and re-fetches the comparison with ?threshold=.
+ * Benchmark page: generation and run pickers, one card per column (column-card.js) with the estimated cost
+ * of a run and the live stats of the current one, and the comparison report of the chosen runs. By default
+ * the latest completed run per column on exactly the selected generations is compared; picking runs (or
+ * opening ?runs=…) pins a choice, and "Latest" returns to the default. A label-threshold slider appears in
+ * the page header when the report has a multi-label question; it is rendered once and re-fetches the
+ * comparison with ?threshold=. The report is redrawn with the other theme's colors when the theme changes.
  * Exports: none (page entry point).
  */
 import { api } from "./api.js";
+import { columnCard, estimateBlock, statsBlock } from "./column-card.js";
 import { clear, h, icon } from "./dom.js";
-import { duration, fixed, money, num, perMillion } from "./format.js";
-import { initLayout, startJob, toastError } from "./layout.js";
+import { shortModel, when } from "./format.js";
+import { initLayout, startJob, THEME_EVENT, toastError } from "./layout.js";
+import { hideTooltips } from "./glossary.js";
 import { renderReport } from "./report.js";
+import { latestCompletedPerColumn, sameSet } from "./selection.js";
 import { readPref, writePref } from "./storage.js";
-import { checklist, emptyState, progressBar, statusBadge, thresholdSlider } from "./widgets.js";
+import { checklist, emptyState, thresholdSlider } from "./widgets.js";
 
 const POLL_MS = 1000;
-const state = { catalog: [], generations: [], runs: [], progress: new Map(), selected: [], pinned: [], timers: new Map(), threshold: readPref("threshold", null), sliderShown: false };
+const ESTIMATE_DELAY_MS = 300;
+const state = {
+  catalog: [],
+  generations: [],
+  runs: [],
+  progress: new Map(),
+  timers: new Map(),
+  estimates: new Map(),
+  selected: [],
+  chosen: [],
+  explicit: false,
+  threshold: readPref("threshold", null),
+  sliderShown: false,
+  report: null,
+};
 
-const sameSet = (values, set) => values.length === set.size && values.every((value) => set.has(value));
 const selectedSet = () => new Set(state.selected);
-const selectedMode = (columnId) => readPref(`benchmark.mode.${columnId}`, "per_email");
+const modelOf = (column) => readPref(`benchmark.model.${column.id}`, column.default_model);
+const modeOf = (column) => readPref(`benchmark.mode.${column.id}`, "per_email");
+const columnIndex = (run) => state.catalog.findIndex((column) => column.id === run.column);
 
 async function main() {
   await initLayout();
-  state.pinned = (new URLSearchParams(location.search).get("runs") ?? "").split(",").filter(Boolean);
+  const requested = (new URLSearchParams(location.search).get("runs") ?? "").split(",").filter(Boolean);
   const [catalog, generations, runs] = await Promise.all([api.catalog(), api.generations(), api.runs()]);
   state.catalog = catalog;
   state.generations = generations.map((view) => view.meta).filter((meta) => meta.done > 0);
   state.runs = runs.map((view) => view.meta);
-  state.selected = initialSelection();
-  renderPicker();
+  state.selected = initialSelection(requested);
+  state.explicit = requested.length > 0;
+  state.chosen = state.explicit ? requested : defaultRuns();
+  renderPickers();
   renderColumns();
   trackRunning();
+  window.addEventListener(THEME_EVENT, redrawReport);
   await refreshComparison();
 }
 
-function initialSelection() {
+function initialSelection(requested) {
+  const pinned = state.runs.find((run) => requested.includes(run.id));
+  if (pinned) return [...pinned.generation_ids];
   const known = new Set(state.generations.map((generation) => generation.id));
   const stored = (readPref("benchmark.generations", []) ?? []).filter((id) => known.has(id));
   return stored.length ? stored : state.generations.slice(0, 1).map((generation) => generation.id);
 }
 
-function renderPicker() {
-  const items = state.generations.map((generation) => ({ value: generation.id, text: `${generation.name} · ${generation.done} emails`, hint: `${generation.id} · ${generation.status}` }));
-  clear(document.getElementById("generation-picker"), checklist({ label: "Generations", items, selected: state.selected, onChange: onSelection }));
+function defaultRuns() {
+  const ids = new Set(latestCompletedPerColumn(state.runs, state.selected));
+  return state.runs.filter((run) => ids.has(run.id)).sort((a, b) => columnIndex(a) - columnIndex(b)).map((run) => run.id);
 }
 
-function onSelection(selected) {
+function runItems() {
+  const selected = selectedSet();
+  const title = (run) => state.catalog.find((column) => column.id === run.column)?.title ?? run.column;
+  return state.runs
+    .filter((run) => run.status === "completed" && sameSet(run.generation_ids, selected))
+    .map((run) => ({ value: run.id, text: `${title(run)} · ${shortModel(run.model)}${run.mode === "all_in_one" ? " · all in one" : ""}`, hint: `${when(run.created_at)} · ${run.n_done} emails` }));
+}
+
+function renderPickers() {
+  const generations = state.generations.map((generation) => ({ value: generation.id, text: `${generation.name} · ${generation.done} emails`, hint: `${generation.id} · ${generation.status}` }));
+  const latest = h("button", { class: "btn btn-sm btn-outline-secondary", type: "button", title: "Compare the latest completed run of every column", disabled: !state.explicit, onclick: resetRuns }, icon("arrow-counterclockwise"), " Latest");
+  clear(
+    document.getElementById("generation-picker"),
+    h("div", { class: "d-flex flex-wrap gap-2" }, checklist({ label: "Generations", items: generations, selected: state.selected, onChange: onGenerations }), checklist({ label: "Runs", items: runItems(), selected: state.chosen, onChange: onRuns }), latest),
+  );
+}
+
+function onGenerations(selected) {
   state.selected = selected;
-  state.pinned = [];
   writePref("benchmark.generations", selected);
-  for (const column of state.catalog) refreshStats(column.id);
+  resetRuns();
+  for (const column of state.catalog) {
+    refreshStats(column.id);
+    scheduleEstimate(column);
+  }
+}
+
+function onRuns(chosen) {
+  state.chosen = chosen;
+  state.explicit = true;
+  syncUrl();
+  renderPickers();
   refreshComparison().catch(toastError);
+}
+
+function resetRuns() {
+  state.explicit = false;
+  state.chosen = defaultRuns();
+  syncUrl();
+  renderPickers();
+  refreshComparison().catch(toastError);
+}
+
+function syncUrl() {
+  const query = state.explicit && state.chosen.length ? `?${new URLSearchParams({ runs: state.chosen.join(",") })}` : "";
+  history.replaceState(null, "", `${location.pathname}${query}`);
 }
 
 function renderColumns() {
@@ -59,56 +124,51 @@ function renderColumns() {
     container.append(emptyState("No columns are configured in config/benchmark.toml."));
     return;
   }
-  for (const column of state.catalog) container.append(h("div", { class: "col-12 col-md-6 col-xxl-3" }, columnCard(column)));
-}
-
-function modelLabel(model) {
-  return `${model.name} — ${perMillion(model.prompt_price_per_m)} / ${perMillion(model.completion_price_per_m)} per 1M`;
-}
-
-function columnCard(column) {
-  const chosen = readPref(`benchmark.model.${column.id}`, column.default_model);
-  const select = h(
-    "select",
-    { class: "form-select form-select-sm", "aria-label": `${column.title} model`, onchange: (event) => writePref(`benchmark.model.${column.id}`, event.target.value) },
-    column.models.map((model) => h("option", { value: model.id, selected: model.id === chosen }, modelLabel(model))),
-  );
-  const running = currentRun(column.id)?.status === "running";
-  const run = h("button", { class: "btn btn-primary btn-sm", type: "button", onclick: () => launch(column, select.value) }, icon("play-fill"), " Run");
-  const cancel = h("button", { class: "btn btn-outline-danger btn-sm", type: "button", id: `cancel-${column.id}`, disabled: !running, onclick: () => cancelColumn(column.id) }, icon("stop-fill"), " Cancel");
-  return h(
-    "div",
-    { class: "card h-100 column-card shadow-sm" },
-    h("div", { class: "card-header d-flex align-items-center" }, h("span", { class: "fw-semibold me-auto" }, column.title), h("span", { class: "badge text-bg-light border" }, column.kind)),
-    h(
-      "div",
-      { class: "card-body d-flex flex-column gap-2" },
-      column.error ? h("div", { class: "alert alert-warning py-1 px-2 small mb-0" }, icon("exclamation-triangle"), ` Catalog unavailable: ${column.error}`) : null,
-      h("div", {}, h("label", { class: "form-label small mb-1" }, "Model"), select, columnExtras(column)),
-      h("div", { class: "d-flex gap-2" }, run, cancel),
-      h("div", { id: `stats-${column.id}` }, statsFor(column.id)),
-    ),
-  );
-}
-
-function columnExtras(column) {
-  if (column.kind === "chat") return modeToggle(column);
-  if (column.kind === "embeddings") {
-    return h("div", { class: "small text-body-secondary mt-2" }, icon("thermometer-half"), ` τ = ${column.embedding_temperature} · ${column.emails_per_request} emails per request`);
+  for (const column of state.catalog) {
+    const handlers = {
+      model: modelOf(column),
+      mode: modeOf(column),
+      running: currentRun(column.id)?.status === "running",
+      onModel: (value) => savePref(column, "model", value),
+      onMode: (value) => savePref(column, "mode", value),
+      onRun: (model) => launch(column, model),
+      onCancel: () => cancelColumn(column.id),
+    };
+    container.append(h("div", { class: "col-12 col-md-6 col-xxl-3" }, columnCard(column, handlers)));
+    refreshStats(column.id);
+    scheduleEstimate(column, 0);
   }
-  return null;
 }
 
-function modeToggle(column) {
-  const current = selectedMode(column.id);
-  const option = (value, text) => {
-    const id = `mode-${column.id}-${value}`;
-    return [
-      h("input", { type: "radio", class: "btn-check", name: `mode-${column.id}`, id, value, checked: current === value, onchange: () => writePref(`benchmark.mode.${column.id}`, value) }),
-      h("label", { class: "btn btn-outline-secondary btn-sm", for: id }, text),
-    ];
+function savePref(column, name, value) {
+  writePref(`benchmark.${name}.${column.id}`, value);
+  scheduleEstimate(column);
+}
+
+function requestBody(column, model) {
+  const body = { column: column.id, model, generation_ids: state.selected };
+  if (column.kind === "chat") body.mode = modeOf(column);
+  return body;
+}
+
+function scheduleEstimate(column, delay = ESTIMATE_DELAY_MS) {
+  clearTimeout(state.estimates.get(column.id)?.timer);
+  const token = { timer: setTimeout(() => refreshEstimate(column, token), delay) };
+  state.estimates.set(column.id, token);
+}
+
+async function refreshEstimate(column, token) {
+  const show = (estimate) => {
+    const target = document.getElementById(`estimate-${column.id}`);
+    if (target && state.estimates.get(column.id) === token) replaceContent(target, estimateBlock(estimate));
   };
-  return h("div", { class: "btn-group mt-2 w-100", role: "group", "aria-label": "Request mode" }, option("per_email", "Per email"), option("all_in_one", "All in one"));
+  if (!state.selected.length) return show(null);
+  show(await api.estimateRun(requestBody(column, modelOf(column))).catch((error) => error));
+}
+
+function replaceContent(target, content) {
+  hideTooltips(target);
+  clear(target, content);
 }
 
 function currentRun(columnId) {
@@ -117,43 +177,13 @@ function currentRun(columnId) {
   return matching.find((run) => run.status === "running") ?? matching[0];
 }
 
-function statRows(run, live) {
-  const rows = [
-    ["Status", statusBadge(run.status)],
-    ["Elapsed", duration(live ? live.elapsed_s : run.duration_s)],
-    ["Cost", money(live ? live.cost : run.total_cost)],
-    ["Errors", num(live ? live.errors : run.n_errors)],
-    ["Requests", `${num(run.n_requests)}${run.n_splits ? ` (+${run.n_splits} split)` : ""}`],
-    ["Tokens in / out", `${num(run.input_tokens)} / ${num(run.output_tokens)}`],
-    ["Latency p50 / p95", `${fixed(run.latency_p50_ms, 0)} / ${fixed(run.latency_p95_ms, 0)} ms`],
-  ];
-  if (run.kind === "embeddings") {
-    rows.push(["Cache hits", `${num(run.cache_hits)} / ${num(run.cache_hits + run.cache_misses)}`], ["Cold cost", money(run.cold_cost)]);
-  }
-  return rows;
-}
-
-function statsFor(columnId) {
-  const run = currentRun(columnId);
-  if (!run) return h("p", { class: "small text-body-secondary mb-0" }, "No run on the selected generations yet.");
-  const live = run.status === "running" ? state.progress.get(run.id) : null;
-  const done = live ? live.done : run.n_done;
-  const items = statRows(run, live).flatMap(([label, value]) => [h("dt", { class: "col-6 stat-label" }, label), h("dd", { class: "col-6 stat-value mb-1" }, value)]);
-  return h(
-    "div",
-    {},
-    progressBar(done, run.n_emails, { animated: run.status === "running" }),
-    h("dl", { class: "row small mb-0 mt-2" }, items),
-    h("div", { class: "small text-body-secondary text-truncate", title: run.id }, `${run.model} · ${run.mode} · ${run.id}`),
-    run.error ? h("div", { class: "alert alert-danger py-1 px-2 small mt-2 mb-0" }, run.error) : null,
-  );
-}
-
 function refreshStats(columnId) {
+  const run = currentRun(columnId);
+  const live = run?.status === "running" ? state.progress.get(run.id) : null;
   const target = document.getElementById(`stats-${columnId}`);
-  if (target) clear(target, statsFor(columnId));
+  if (target) replaceContent(target, statsBlock(run, live));
   const cancel = document.getElementById(`cancel-${columnId}`);
-  if (cancel) cancel.disabled = currentRun(columnId)?.status !== "running";
+  if (cancel) cancel.disabled = run?.status !== "running";
 }
 
 async function launch(column, model) {
@@ -161,9 +191,7 @@ async function launch(column, model) {
     toastError("Select at least one generation first.");
     return;
   }
-  const body = { column: column.id, model, generation_ids: state.selected };
-  if (column.kind === "chat") body.mode = selectedMode(column.id);
-  const view = await startJob(() => api.createRun(body));
+  const view = await startJob(() => api.createRun(requestBody(column, model)));
   if (!view) return;
   upsertRun(view.meta, view.progress);
   track(view.meta.id);
@@ -182,12 +210,7 @@ function upsertRun(meta, progress) {
 }
 
 function track(runId) {
-  if (state.timers.has(runId)) return;
-  schedulePoll(runId);
-}
-
-function schedulePoll(runId) {
-  state.timers.set(runId, setTimeout(() => poll(runId), POLL_MS));
+  if (!state.timers.has(runId)) state.timers.set(runId, setTimeout(() => poll(runId), POLL_MS));
 }
 
 function stopTracking(runId) {
@@ -199,17 +222,21 @@ async function poll(runId) {
   try {
     const view = await api.run(runId);
     if (!state.timers.has(runId)) return;
+    state.timers.delete(runId);
     upsertRun(view.meta, view.progress);
-    if (view.meta.status === "running") {
-      schedulePoll(runId);
-      return;
-    }
-    stopTracking(runId);
-    await refreshComparison();
+    if (view.meta.status === "running") return track(runId);
+    runFinished(view.meta);
   } catch (error) {
     stopTracking(runId);
     toastError(error);
   }
+}
+
+function runFinished(meta) {
+  const column = state.catalog.find((item) => item.id === meta.column);
+  if (column) scheduleEstimate(column);
+  if (state.explicit) return renderPickers();
+  resetRuns();
 }
 
 function trackRunning() {
@@ -223,25 +250,23 @@ window.addEventListener("pageshow", (event) => {
   if (event.persisted) trackRunning();
 });
 
-function latestCompletedRuns() {
-  const selected = selectedSet();
-  return state.catalog
-    .map((column) => state.runs.find((run) => run.column === column.id && run.status === "completed" && sameSet(run.generation_ids, selected)))
-    .filter(Boolean)
-    .map((run) => run.id);
-}
-
 async function refreshComparison() {
   const container = document.getElementById("comparison");
-  const runIds = state.pinned.length ? state.pinned : latestCompletedRuns();
+  const known = new Map(state.runs.map((run) => [run.id, run]));
+  const runIds = state.chosen.filter((id) => known.has(id)).sort((a, b) => columnIndex(known.get(a)) - columnIndex(known.get(b)));
   if (!runIds.length) {
-    clear(container, emptyState("Run at least one column on the selected generations to see the comparison.", "bar-chart"));
+    state.report = null;
+    clear(container, emptyState("Run at least one column on the selected generations, or pick runs, to see the comparison.", "bar-chart"));
     return;
   }
   clear(container, h("p", { class: "small text-body-secondary" }, "Loading comparison…"));
-  const report = await api.compare(runIds, state.threshold);
-  renderThreshold(report);
-  renderReport(container, report, { pinned: state.pinned.length > 0 });
+  state.report = await api.compare(runIds, state.threshold);
+  renderThreshold(state.report);
+  renderReport(container, state.report);
+}
+
+function redrawReport() {
+  if (state.report) renderReport(document.getElementById("comparison"), state.report);
 }
 
 function renderThreshold(report) {

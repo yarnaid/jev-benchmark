@@ -43,3 +43,22 @@ for (const value of NON_STRING_MODELS) {
 test("shortModel keeps the last path segment of a real model id", () => {
   assert.equal(shortModel("openai/gpt-5.6-terra"), "gpt-5.6-terra");
 });
+
+const { times } = await import("../../src/jev_bench/web/static/js/format.js");
+
+const TIMES = [
+  ["four times", 12, 3, "×4"],
+  ["one decimal below ten", 57, 5.83, "×9.8"],
+  ["whole number from ten", 0.635, 0.00808, "×79"],
+  ["the base itself", 3, 3, "×1"],
+  ["faster than the base", 1.5, 3, "×0.5"],
+  ["much cheaper than the base", 0.1, 3, "×0.03"],
+  ["zero base", 5, 0, "—"],
+  ["missing value", null, 3, "—"],
+  ["missing base", 3, undefined, "—"],
+  ["non-finite value", Infinity, 3, "—"],
+];
+
+for (const [name, value, base, expected] of TIMES) {
+  test(`times: ${name}`, () => assert.equal(times(value, base), expected));
+}

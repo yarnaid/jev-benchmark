@@ -26,6 +26,9 @@ PAGE_MODULES = (
     "email-detail.js",
     "glossary.js",
     "help.js",
+    "palette.js",
+    "column-card.js",
+    "report-summary.js",
 )
 
 

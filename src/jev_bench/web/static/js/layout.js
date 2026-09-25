@@ -2,12 +2,15 @@
  * Shared page chrome: navbar (pages, API-key badge, theme toggle), API-key dialog (with how to get a
  * key), toasts, the delegated Bootstrap tooltips behind every (?) icon, and a job starter that opens the
  * key dialog when the server asks for a key.
- * Exports: initLayout, keySteps, openKeyModal, toastError, toastSuccess, startJob.
+ * THEME_EVENT fires on window after the light/dark theme is toggled.
+ * Exports: THEME_EVENT, initLayout, keySteps, openKeyModal, toastError, toastSuccess, startJob.
  */
 import { api, needsKey } from "./api.js";
 import { clear, h, icon } from "./dom.js";
 import { forgetKey, getKey, KEY_EVENT, KEY_STEPS, setKey } from "./key.js";
 import { readPref, writePref } from "./storage.js";
+
+export const THEME_EVENT = "jev-bench:theme-changed";
 
 const PAGES = [
   ["/", "Benchmark", "speedometer2"],
@@ -34,7 +37,7 @@ function navbar() {
   const theme = h("button", { class: "btn btn-sm btn-outline-secondary", type: "button", title: "Toggle theme", "aria-label": "Toggle theme", onclick: toggleTheme }, icon("circle-half"));
   return h(
     "nav",
-    { class: "navbar navbar-expand bg-body-tertiary border-bottom mb-3" },
+    { class: "navbar navbar-expand jb-nav mb-3", "data-bs-theme": "dark" },
     h(
       "div",
       { class: "container-fluid" },
@@ -149,4 +152,5 @@ function toggleTheme() {
   const next = document.documentElement.dataset.bsTheme === "dark" ? "light" : "dark";
   writePref("theme", next);
   applyTheme(next);
+  window.dispatchEvent(new Event(THEME_EVENT));
 }
