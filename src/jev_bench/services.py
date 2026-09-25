@@ -2,6 +2,7 @@
 
 Classes:
     Services: stores, OpenRouter client, catalog, job registry and config loaders from Settings.
+        `api_key` prefers a key supplied by the browser over the server's OPENROUTER_API_KEY.
 """
 
 import httpx2
@@ -48,11 +49,8 @@ class Services:
         return load_generation_config(self.settings.config_dir / "generation.toml")
 
     def api_key(self, supplied: str | None) -> str | None:
-        server = self.settings.server_api_key()
-        if server:
-            return server
         cleaned = (supplied or "").strip()
-        return cleaned or None
+        return cleaned or self.settings.server_api_key() or None
 
     def sweep_interrupted(self) -> list[str]:
         runs = mark_interrupted_runs(self.runs, self.jobs.is_running)

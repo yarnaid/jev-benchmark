@@ -18,7 +18,9 @@ def _unused(request: httpx2.Request) -> httpx2.Response:
 @pytest.mark.parametrize(
     ("server_key", "supplied", "expected"),
     [
-        pytest.param("sk-server", "sk-browser", "sk-server", id="server-wins"),
+        pytest.param("sk-server", "sk-browser", "sk-browser", id="browser-key-overrides-server"),
+        pytest.param("sk-server", None, "sk-server", id="server-key-without-browser-key"),
+        pytest.param("sk-server", "   ", "sk-server", id="blank-browser-key-falls-back"),
         pytest.param(None, "  sk-browser  ", "sk-browser", id="browser-stripped"),
         pytest.param(None, None, None, id="none"),
         pytest.param(None, "   ", None, id="blank"),

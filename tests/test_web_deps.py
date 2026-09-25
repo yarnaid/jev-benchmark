@@ -16,7 +16,8 @@ def _unused(request: httpx2.Request) -> httpx2.Response:
 @pytest.mark.parametrize(
     ("server_key", "header", "status", "expected"),
     [
-        pytest.param("sk-server", "sk-browser", 200, "sk-server", id="server-wins"),
+        pytest.param("sk-server", "sk-browser", 200, "sk-browser", id="header-overrides-server"),
+        pytest.param("sk-server", None, 200, "sk-server", id="server-without-header"),
         pytest.param(None, "sk-browser", 200, "sk-browser", id="header-used"),
         pytest.param(None, None, 400, NO_KEY_DETAIL, id="missing"),
         pytest.param(None, "   ", 400, NO_KEY_DETAIL, id="blank-header"),

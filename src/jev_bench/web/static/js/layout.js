@@ -43,15 +43,17 @@ function navbar() {
 }
 
 async function refreshKeyBadge() {
-  const badge = document.getElementById("key-badge");
   const serverKey = await api.status().then((status) => status.server_key, () => false);
-  if (serverKey) {
-    clear(badge, h("span", { class: "badge text-bg-success", title: "The server has OPENROUTER_API_KEY" }, icon("shield-lock"), " server key"));
-    return;
-  }
-  const stored = Boolean(getKey());
-  const style = stored ? "btn-success" : "btn-warning";
-  clear(badge, h("button", { class: `btn btn-sm ${style}`, type: "button", onclick: openKeyModal }, icon("key"), stored ? " key saved" : " set API key"));
+  clear(document.getElementById("key-badge"), keyButton(Boolean(getKey()), serverKey));
+}
+
+function keyButton(stored, serverKey) {
+  const [style, name, text, title] = stored
+    ? ["btn-success", "key-fill", " your key", serverKey ? "Your key overrides the server key for jobs you start" : "Your key is used for jobs you start"]
+    : serverKey
+      ? ["btn-outline-success", "shield-lock", " server key", "The server's key is used; click to use your own key instead"]
+      : ["btn-warning", "key", " set API key", "No key yet: runs, generations and analyses need an OpenRouter key"];
+  return h("button", { class: `btn btn-sm ${style}`, type: "button", title, onclick: openKeyModal }, icon(name), text);
 }
 
 function keyModal() {
@@ -71,7 +73,7 @@ function keyModal() {
   input.addEventListener("keydown", (event) => {
     if (event.key === "Enter") save();
   });
-  const note = "The server has no OPENROUTER_API_KEY. A key entered here is stored only in this browser (localStorage) and is sent only when you start a run or a generation.";
+  const note = "A key entered here is stored only in this browser (localStorage) and sent only when you start a run, a generation or an analysis. It overrides the server's key, if the server has one.";
   modal.append(
     h(
       "div",
@@ -80,7 +82,7 @@ function keyModal() {
         "div",
         { class: "modal-content" },
         h("div", { class: "modal-header" }, h("h5", { class: "modal-title", id: "key-modal-title" }, icon("key"), " OpenRouter API key"), h("button", { type: "button", class: "btn-close", "data-bs-dismiss": "modal", "aria-label": "Close" })),
-        h("div", { class: "modal-body" }, h("p", { class: "small text-body-secondary" }, note), input),
+        h("div", { class: "modal-body" }, h("p", { class: "small text-body-secondary" }, note), input, keyHowTo()),
         h(
           "div",
           { class: "modal-footer" },
@@ -91,6 +93,17 @@ function keyModal() {
     ),
   );
   return modal;
+}
+
+const KEY_LINKS = [
+  ["Create a key", "https://openrouter.ai/keys", "Sign in to OpenRouter, open Keys and create a key (it starts with sk-or-v1-)."],
+  ["Add credits", "https://openrouter.ai/settings/credits", "Runs are paid per use from your OpenRouter credits."],
+  ["Optional: your provider keys", "https://openrouter.ai/workspaces/default/byok", "Bring your own Anthropic or OpenAI key (BYOK) to be billed by the provider directly."],
+];
+
+function keyHowTo() {
+  const steps = KEY_LINKS.map(([label, href, text]) => h("li", { class: "mb-1" }, h("a", { href, target: "_blank", rel: "noopener noreferrer" }, label, " ", icon("box-arrow-up-right")), h("span", { class: "d-block text-body-secondary" }, text)));
+  return h("details", { class: "mt-3 small" }, h("summary", { class: "fw-semibold" }, icon("question-circle"), " How to get an OpenRouter key"), h("ol", { class: "mt-2 mb-0 ps-3" }, steps));
 }
 
 export function openKeyModal() {

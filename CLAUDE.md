@@ -102,9 +102,10 @@ node --test tests/js/                           # JS unit tests (Node's runner, 
 - **Generator answers never feed the benchmark.** For example, τ for embeddings is fixed in config, not
   tuned on references.
 - **API keys:**
-  - the server key (`OPENROUTER_API_KEY`) wins;
-  - otherwise the browser sends `X-OpenRouter-Key`, and only on `POST /api/runs` and
-    `POST /api/generations`;
+  - a key entered in the browser (`X-OpenRouter-Key`) overrides the server key (`OPENROUTER_API_KEY`);
+    without one the server key is used;
+  - the browser sends the header only on job-starting POSTs (`/api/runs`, `/api/generations`,
+    `/api/analyses`);
   - keys are passed per call (never set on the shared client) and are never persisted or logged. A test
     greps `data/` and the logs for a sentinel key.
 - **UI:**
@@ -116,8 +117,9 @@ node --test tests/js/                           # JS unit tests (Node's runner, 
 
 ## Key safety
 
-- The server key (`OPENROUTER_API_KEY`) always wins; the browser-supplied `X-OpenRouter-Key` header is
-  used only when the server has none, and only on `POST /api/runs` and `POST /api/generations`.
+- A non-blank browser-supplied `X-OpenRouter-Key` overrides the server key (`OPENROUTER_API_KEY`); a
+  blank or missing header falls back to the server key (`Services.api_key`). The header is sent only on
+  `POST /api/runs`, `POST /api/generations` and `POST /api/analyses`.
 - Keys are never persisted (run/generation/response files) and never logged.
 - `classifiers/*` and `GeneratorDeps` hold the key as `SecretStr`, never a plain `str` field.
 - Every entry point (`cli.py`, `web/app.py`) calls `log_setup.configure_logging()` first, which runs with
