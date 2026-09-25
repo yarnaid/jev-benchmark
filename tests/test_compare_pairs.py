@@ -4,14 +4,19 @@ import pytest
 from tests.compare_data import (
     CATEGORY_A,
     IDS,
+    TOPICS_A,
+    TOPICS_B,
     build_answers,
     build_reference,
     build_run_a,
     build_run_b,
+    build_topics_reference,
     rater,
+    topics_answers,
 )
 
 from jev_bench.compare.pairs import (
+    PairStats,
     RaterMatrix,
     pair_stats,
     rater_matrix,
@@ -19,7 +24,7 @@ from jev_bench.compare.pairs import (
     slice_matrix,
 )
 from jev_bench.compare.raters import Rater
-from jev_bench.questions import AnyQuestion, QuestionSet
+from jev_bench.questions import AnyQuestion, QuestionSet, with_threshold
 
 
 @pytest.fixture
@@ -189,3 +194,54 @@ def test_resample_index_cache_is_bounded_read_only_and_deterministic() -> None:
     assert again is not first
     assert again.tolist() == first.tolist()
     assert again.tolist() == resample_index_cache(resamples=10, seed=0)(5).tolist()
+
+
+def _topics_pair(questions: QuestionSet, threshold: float | None = None) -> PairStats | None:
+    a = rater("a", "run", topics_answers(TOPICS_A), questions)
+    b = rater("b", "run", topics_answers(TOPICS_B), questions)
+    question = with_threshold(questions, threshold).get("topics")
+    index_for = resample_index_cache(resamples=50, seed=0)
+    return pair_stats(a, b, _matrices([a, b], question), question, index_for)
+
+
+def test_multi_pair_fills_set_metrics(multi_questions: QuestionSet) -> None:
+    pair = _topics_pair(multi_questions)
+    assert pair is not None
+    assert (pair.n, pair.agreement, pair.jaccard) == (4, 0.75, 0.875)
+    assert pair.f1 == pytest.approx(10 / 11)
+    assert pair.kappa == pytest.approx(5 / 6)
+    assert (pair.pearson, pair.brier) == (None, None)
+    assert pair.jsd > 0
+    assert pair.jaccard_ci is not None
+
+
+def test_multi_pair_uses_the_question_threshold(multi_questions: QuestionSet) -> None:
+    pair = _topics_pair(multi_questions, threshold=0.5)
+    assert pair is not None
+    assert pair.agreement == 0.5
+
+
+def test_multi_brier_against_the_uniform_reference_in_both_orientations(
+    multi_questions: QuestionSet,
+) -> None:
+    a = rater("a", "run", topics_answers(TOPICS_A), multi_questions)
+    reference = build_topics_reference(multi_questions)
+    question = multi_questions.get("topics")
+    index_for = resample_index_cache(resamples=10, seed=0)
+    matrices = _matrices([a, reference], question)
+    forward = pair_stats(a, reference, matrices, question, index_for)
+    backward = pair_stats(reference, a, matrices, question, index_for)
+    assert forward is not None
+    assert backward is not None
+    assert forward.brier == pytest.approx(0.1875)
+    assert backward.brier == pytest.approx(0.1875)
+
+
+def test_single_label_pairs_leave_set_metrics_empty(
+    questions: QuestionSet, run_a: Rater, run_b: Rater
+) -> None:
+    question = questions.get("category")
+    index_for = resample_index_cache(resamples=10, seed=0)
+    pair = pair_stats(run_a, run_b, _matrices([run_a, run_b], question), question, index_for)
+    assert pair is not None
+    assert (pair.jaccard, pair.jaccard_ci, pair.f1) == (None, None, None)

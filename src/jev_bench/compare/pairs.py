@@ -1,7 +1,9 @@
 """Pairwise agreement between two raters, and the per-rater matrix cache pairs are built from.
 
 Classes:
-    PairStats: pairwise agreement, kappa, JSD, Pearson and Brier for one rater pair.
+    PairStats: pairwise agreement, kappa, JSD, Pearson and Brier for one rater pair. For a multi
+        question agreement is exact label-set match, kappa is the macro kappa over labels, Brier is
+        against the hard rater's (uniform) distribution, Pearson is None, and jaccard / f1 are set.
     RaterMatrix: one rater's (email_id -> row) index plus its stacked distribution matrix,
         built once per question and reused across every pair that rater takes part in.
 Functions:
@@ -19,9 +21,11 @@ from typing import NamedTuple
 import numpy as np
 from pydantic import BaseModel
 
+from jev_bench.compare.multi import multi_pair_values
 from jev_bench.compare.raters import Column, Rater
 from jev_bench.metrics.agreement import (
     brier_score,
+    brier_to_target,
     cohen_kappa,
     confusion_batch,
     disagreement_weights,
@@ -38,7 +42,7 @@ from jev_bench.metrics.distributions import (
     js_divergence,
     to_matrix,
 )
-from jev_bench.questions import AnyQuestion
+from jev_bench.questions import AnyQuestion, MultiQuestion
 
 __all__ = [
     "PairStats",
@@ -61,6 +65,9 @@ class PairStats(BaseModel):
     jsd: float
     pearson: float | None
     brier: float | None
+    jaccard: float | None = None
+    jaccard_ci: tuple[float, float] | None = None
+    f1: float | None = None
 
 
 class RaterMatrix(NamedTuple):
@@ -115,6 +122,8 @@ def _pair_from_matrices(
     question: AnyQuestion,
     index: IntArray,
 ) -> PairStats:
+    if isinstance(question, MultiQuestion):
+        return _multi_pair(left, right, left_matrix, right_matrix, question, index)
     left_labels, right_labels = argmax_labels(left_matrix), argmax_labels(right_matrix)
     k = len(question.option_ids)
     quadratic = question.type == "score"
@@ -130,7 +139,27 @@ def _pair_from_matrices(
         kappa_ci=percentile_ci(kappa_from_confusion(confusion, weights)),
         jsd=float(js_divergence(left_matrix, right_matrix).mean()),
         pearson=_pearson(left_matrix, right_matrix, question),
-        brier=_brier(left, right, left_matrix, right_matrix),
+        brier=_brier(left, right, left_matrix, right_matrix, question),
+    )
+
+
+def _multi_pair(
+    left: Rater,
+    right: Rater,
+    left_matrix: FloatArray,
+    right_matrix: FloatArray,
+    question: MultiQuestion,
+    index: IntArray,
+) -> PairStats:
+    values = multi_pair_values(left_matrix, right_matrix, question.threshold, index)
+    return PairStats(
+        a=left.id,
+        b=right.id,
+        n=int(left_matrix.shape[0]),
+        jsd=float(js_divergence(left_matrix, right_matrix).mean()),
+        pearson=None,
+        brier=_brier(left, right, left_matrix, right_matrix, question),
+        **values._asdict(),
     )
 
 
@@ -147,9 +176,15 @@ def _pearson(left: FloatArray, right: FloatArray, question: AnyQuestion) -> floa
 
 
 def _brier(
-    left: Rater, right: Rater, left_matrix: FloatArray, right_matrix: FloatArray
+    left: Rater,
+    right: Rater,
+    left_matrix: FloatArray,
+    right_matrix: FloatArray,
+    question: AnyQuestion,
 ) -> float | None:
     if left.hard == right.hard:
         return None
     probabilities, hard = (right_matrix, left_matrix) if left.hard else (left_matrix, right_matrix)
+    if isinstance(question, MultiQuestion):
+        return brier_to_target(probabilities, hard)
     return brier_score(probabilities, argmax_labels(hard))

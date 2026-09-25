@@ -6,8 +6,14 @@ its own thin `@pytest.fixture`.
 
 Constants:
     IDS, CATEGORY_A, URGENCY, REPLY: synthetic distributions for the mini question set.
+    TOPICS_A, TOPICS_B: distributions for the multi_questions "topics" question. At threshold 0.8
+        (labels with p >= 0.8 * max) their label sets are A = {billing, meeting}, {meeting},
+        {travel}, {billing, meeting} and B = {billing}, {meeting}, {travel}, {billing, meeting}.
+    TOPICS_REFERENCE: reference label lists for the same four emails.
 Functions:
     build_answers: a full three-question answer set from a category distribution list.
+    topics_answers: a topics-only answer set from a TOPICS_* list.
+    build_topics_reference: a reference rater over TOPICS_REFERENCE.
     rater: build a Rater with the given id, kind and answers.
     build_run_a, build_run_b: two "run" raters over CATEGORY_A (b perturbed at index 2).
     build_reference: a reference rater over hard category/urgency/needs_reply labels.
@@ -32,6 +38,19 @@ URGENCY = [
     {"low": 0.1, "today": 0.1, "now": 0.8},
 ]
 REPLY = [{"yes": p, "no": 1 - p} for p in (0.2, 0.9, 0.4, 0.7)]
+TOPICS_A = [
+    {"billing": 0.5, "meeting": 0.45, "travel": 0.05},
+    {"billing": 0.1, "meeting": 0.8, "travel": 0.1},
+    {"billing": 0.1, "meeting": 0.2, "travel": 0.7},
+    {"billing": 0.4, "meeting": 0.35, "travel": 0.25},
+]
+TOPICS_B = [
+    {"billing": 0.8, "meeting": 0.15, "travel": 0.05},
+    {"billing": 0.05, "meeting": 0.9, "travel": 0.05},
+    {"billing": 0.1, "meeting": 0.1, "travel": 0.8},
+    {"billing": 0.45, "meeting": 0.4, "travel": 0.15},
+]
+TOPICS_REFERENCE = [["billing", "meeting"], ["meeting"], ["travel"], ["billing"]]
 
 
 def build_answers(category: list[Distribution]) -> dict[str, dict[str, Distribution]]:
@@ -69,5 +88,17 @@ def build_reference(questions: QuestionSet) -> Rater:
             reference_answers={"category": label, "urgency": "now", "needs_reply": "no"},
         )
         for email_id, label in zip(IDS, labels, strict=True)
+    ]
+    return reference_rater(emails, questions, {"g": questions})
+
+
+def topics_answers(topics: list[Distribution]) -> dict[str, dict[str, Distribution]]:
+    return {email_id: {"topics": topics[i]} for i, email_id in enumerate(IDS)}
+
+
+def build_topics_reference(questions: QuestionSet) -> Rater:
+    emails = [
+        EmailFactory(id=email_id, reference_answers={"topics": labels})
+        for email_id, labels in zip(IDS, TOPICS_REFERENCE, strict=True)
     ]
     return reference_rater(emails, questions, {"g": questions})
