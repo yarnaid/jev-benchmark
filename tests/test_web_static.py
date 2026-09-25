@@ -29,6 +29,7 @@ PAGE_MODULES = (
     "palette.js",
     "column-card.js",
     "report-summary.js",
+    "option-order.js",
 )
 
 

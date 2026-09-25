@@ -230,6 +230,31 @@ code,
   scroll-margin-top: 1rem;
 }
 
+.email-meta {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.15rem 0.75rem;
+}
+
+.detail-card .card-body {
+  padding: 0.5rem 0.75rem;
+}
+
+.detail-table td,
+.detail-table th {
+  padding: 0.2rem 0.35rem;
+}
+
+.detail-table .prob-track {
+  min-width: 2.5rem;
+}
+
+.row-reference > td:first-child,
+.row-reference > td:nth-child(2) {
+  background: rgba(var(--bs-success-rgb), 0.14) !important;
+  font-weight: 600;
+}
+
 .clickable {
   cursor: pointer;
 }

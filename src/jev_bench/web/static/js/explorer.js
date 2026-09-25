@@ -11,6 +11,7 @@ import { api } from "./api.js";
 import { clear, h, icon } from "./dom.js";
 import { emailDetail } from "./email-detail.js";
 import { fixed, shortModel, when } from "./format.js";
+import { hideTooltips, withHelp } from "./glossary.js";
 import { initLayout, toastError, toastSuccess } from "./layout.js";
 import { latestCompletedPerColumn } from "./selection.js";
 import { readPref, writePref } from "./storage.js";
@@ -38,6 +39,7 @@ const matchesPair = (values, pair) => {
   return asLabels(values[key]).includes(value);
 };
 const runLabel = (run) => `${run.column} · ${shortModel(run.model)}${run.mode === "all_in_one" ? " · all-in-one" : ""}`;
+const runLabels = () => Object.fromEntries(state.runs.map((run) => [run.id, runLabel(run)]));
 
 async function main() {
   await initLayout();
@@ -187,14 +189,15 @@ function runColumns() {
 
 function renderTable() {
   const target = document.getElementById("email-table");
+  hideTooltips(target);
   const rows = visibleRows();
   if (!rows.length) {
     clear(target, emptyState("No emails match the filters.", "search"));
     return;
   }
   const runs = runColumns();
-  const labels = Object.fromEntries(state.runs.map((run) => [run.id, runLabel(run)]));
-  const head = ["Sent", "From", "Subject", "Generator", `Reference: ${state.question}`, ...runs.map((id) => labels[id] ?? id), "Disagreement"];
+  const labels = runLabels();
+  const head = ["Sent", "From", "Subject", "Generator", withHelp(`Reference: ${state.question}`, "reference"), ...runs.map((id) => labels[id] ?? id), withHelp("Disagreement", "disagreement")];
   const table = h(
     "table",
     { class: "table table-sm table-hover align-middle table-sticky" },
@@ -228,13 +231,14 @@ function emailRow(row, runs) {
 
 async function openEmail(emailId) {
   const body = document.getElementById("email-panel-body");
+  hideTooltips(body);
   clear(body, h("p", { class: "small text-body-secondary" }, "Loading…"));
   bootstrap.Offcanvas.getOrCreateInstance(document.getElementById("email-panel")).show();
   try {
     const detail = await api.email(emailId, runColumns());
     const row = state.rows.find((item) => item.id === emailId) ?? null;
     clear(document.getElementById("email-panel-title"), detail.email.subject);
-    clear(body, emailDetail(detail, { row, threshold: state.threshold, onSave: saveLabels }));
+    clear(body, emailDetail(detail, { row, threshold: state.threshold, labels: runLabels(), onSave: saveLabels }));
   } catch (error) {
     clear(body, h("div", { class: "alert alert-danger" }, error instanceof Error ? error.message : String(error)));
   }
