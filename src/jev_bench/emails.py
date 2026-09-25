@@ -4,7 +4,8 @@ Types:
     EmailState: the JSON object sent as classification input.
 Classes:
     Party: a named mailbox.
-    Email: one generated email with its generation metadata and reference answers.
+    Email: one generated email with its generation metadata and reference answers (one option id
+        per question, or a list of option ids for a multi-label question).
 Functions:
     email_id: id of the n-th email of a generation.
 """
@@ -12,6 +13,8 @@ Functions:
 from typing import TypedDict
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
+
+from jev_bench.questions import HardAnswer
 
 __all__ = [
     "Email",
@@ -48,7 +51,7 @@ class Email(BaseModel):
     body: str
     generator_model: str
     traits: dict[str, str] = Field(default_factory=dict)
-    reference_answers: dict[str, str] = Field(default_factory=dict)
+    reference_answers: dict[str, HardAnswer] = Field(default_factory=dict)
 
     @property
     def generation_id(self) -> str:

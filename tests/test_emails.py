@@ -7,7 +7,7 @@ import pytest
 from pydantic import ValidationError
 from tests.factories import EmailFactory, PartyFactory
 
-from jev_bench.emails import Party, email_id
+from jev_bench.emails import Email, Party, email_id
 
 
 def test_to_state_contains_exactly_the_model_visible_fields() -> None:
@@ -78,3 +78,9 @@ def test_party_formatted(party: Party, expected: str) -> None:
 
 def test_party_factory_is_valid() -> None:
     assert "@" in PartyFactory().address
+
+
+def test_reference_answers_accept_label_lists() -> None:
+    answers = {"category": ["spam", "phishing"], "urgency": "today"}
+    email = EmailFactory(reference_answers=answers)
+    assert Email.model_validate_json(email.model_dump_json()).reference_answers == answers

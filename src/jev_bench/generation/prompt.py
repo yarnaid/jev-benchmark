@@ -2,14 +2,17 @@
 
 Classes:
     GeneratedEmail: the email part of a generator response.
-    GeneratorOutput: validated generator response (email + one answer per question).
+    GeneratorOutput: validated generator response (email + one hard answer per question).
 Functions:
     render_prompts: (system, user) prompts for one plan item.
-    generation_schema: strict JSON schema for `{email, answers}`.
-    parse_generator_output: JSON text -> GeneratorOutput (answers checked against the options;
-        text around the outermost JSON object, e.g. a model's preamble, is ignored).
-    count_mismatches: question-linked traits that the generator's own answers contradict
-        (traits absent from `requested` are skipped).
+    generation_schema: strict JSON schema for `{email, answers}` (an array of option ids for a
+        multi-label question).
+    parse_generator_output: JSON text -> GeneratorOutput (every answer must be a valid hard answer,
+        see questions.hard_distribution; text around the outermost JSON object, e.g. a model's
+        preamble, is ignored).
+    count_mismatches: question-linked traits that the generator's own answers contradict (a
+        multi-label answer agrees when it contains the trait value; traits absent from
+        `requested` are skipped).
 """
 
 from collections.abc import Mapping, Sequence
@@ -21,7 +24,14 @@ from jev_bench.emails import Party
 from jev_bench.generation.config import GenerationConfig
 from jev_bench.generation.plan import PlanItem, ResolvedTrait
 from jev_bench.json_schema import JsonSchema, strict_object
-from jev_bench.questions import QuestionSet, render_questions
+from jev_bench.questions import (
+    AnyQuestion,
+    HardAnswer,
+    MultiQuestion,
+    QuestionSet,
+    hard_distribution,
+    render_questions,
+)
 
 __all__ = [
     "GeneratedEmail",
@@ -49,7 +59,7 @@ class GeneratorOutput(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     email: GeneratedEmail
-    answers: dict[str, str]
+    answers: dict[str, HardAnswer]
 
 
 def render_prompts(
@@ -88,12 +98,14 @@ def generation_schema(questions: QuestionSet) -> JsonSchema:
         "body": {"type": "string"},
     }
     email = strict_object(email_props)
-    answers_props = {
-        question.id: {"type": "string", "enum": list(question.option_ids)}
-        for question in questions.questions
-    }
+    answers_props = {question.id: _answer_schema(question) for question in questions.questions}
     answers = strict_object(answers_props)
     return strict_object({"email": email, "answers": answers})
+
+
+def _answer_schema(question: AnyQuestion) -> JsonSchema:
+    option: JsonSchema = {"type": "string", "enum": list(question.option_ids)}
+    return {"type": "array", "items": option} if isinstance(question, MultiQuestion) else option
 
 
 def parse_generator_output(content: str, questions: QuestionSet) -> GeneratorOutput:
@@ -101,7 +113,7 @@ def parse_generator_output(content: str, questions: QuestionSet) -> GeneratorOut
     invalid = [
         question.id
         for question in questions.questions
-        if output.answers.get(question.id) not in question.options
+        if hard_distribution(question, output.answers.get(question.id)) is None
     ]
     if invalid:
         raise ValueError(f"generator answers missing or invalid for: {invalid}")
@@ -115,12 +127,18 @@ def _outermost_object(content: str) -> str:
 
 
 def count_mismatches(
-    requested: Mapping[str, str], traits: Sequence[ResolvedTrait], answers: Mapping[str, str]
+    requested: Mapping[str, str],
+    traits: Sequence[ResolvedTrait],
+    answers: Mapping[str, HardAnswer],
 ) -> int:
     return sum(
         1
         for trait in traits
         if trait.question
         and trait.name in requested
-        and answers.get(trait.question) != requested[trait.name]
+        and not _agrees(answers.get(trait.question), requested[trait.name])
     )
+
+
+def _agrees(answer: HardAnswer | None, value: str) -> bool:
+    return value in answer if isinstance(answer, list) else answer == value

@@ -7,7 +7,7 @@ sent_at_window_days = 30
 system_prompt = """
 You write realistic synthetic emails for benchmarking email-triage classifiers.
 Write natural English with realistic names, organizations, addresses and details. Never use placeholders such as [Name] or generic domains such as company.com.
-After writing the email, answer every question below about the email you wrote, choosing exactly one option id per question, as a careful human reader would.
+After writing the email, answer every question below about the email you wrote, choosing exactly one option id per question, or every option id that applies (at least one) for a multi-label question, as a careful human reader would.
 
 Questions:
 $questions

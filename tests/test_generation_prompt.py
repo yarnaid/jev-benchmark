@@ -75,6 +75,9 @@ def test_parse_generator_output_orders_answers(questions: QuestionSet) -> None:
         pytest.param(lambda doc: doc["answers"].pop("urgency"), id="missing-answer"),
         pytest.param(lambda doc: doc["email"].update(to=[]), id="no-recipients"),
         pytest.param(lambda doc: doc["email"].update(body=""), id="empty-body"),
+        pytest.param(
+            lambda doc: doc["answers"].update(category=["spam"]), id="list-for-single-choice"
+        ),
     ],
 )
 def test_parse_generator_output_rejects(questions: QuestionSet, mutate: Any) -> None:
@@ -118,3 +121,75 @@ def test_count_mismatches(
 ) -> None:
     traits = resolve_traits(_CONFIG, questions)
     assert count_mismatches(requested, traits, answers) == expected
+
+
+_MULTI_CONFIG = GenerationConfig.model_validate(
+    {
+        "models": ["m"],
+        "system_prompt": "Questions:\n$questions",
+        "user_prompt": "Write about $topic ($topic_prompt), sent $sent_at.",
+        "traits": [{"name": "topic", "question": "topics"}],
+    }
+)
+_MULTI_OUTPUT: dict[str, Any] = {
+    **_OUTPUT,
+    "answers": {**_OUTPUT["answers"], "topics": ["meeting", "billing"]},
+}
+
+
+def test_generation_schema_multi_is_an_array_of_options(multi_questions: QuestionSet) -> None:
+    answers = generation_schema(multi_questions)["properties"]["answers"]
+    assert answers["properties"]["topics"] == {
+        "type": "array",
+        "items": {"type": "string", "enum": ["billing", "meeting", "travel"]},
+    }
+    assert "topics" in answers["required"]
+
+
+@pytest.mark.parametrize(
+    "topics",
+    [
+        pytest.param(["meeting", "billing"], id="label-list-keeps-its-order"),
+        pytest.param("meeting", id="single-id-is-one-label"),
+    ],
+)
+def test_parse_generator_output_accepts_label_answers(
+    multi_questions: QuestionSet, topics: object
+) -> None:
+    doc = {**_MULTI_OUTPUT, "answers": {**_MULTI_OUTPUT["answers"], "topics": topics}}
+    output = parse_generator_output(json.dumps(doc), multi_questions)
+    assert output.answers["topics"] == topics
+    assert output.answers["category"] == "spam"
+
+
+@pytest.mark.parametrize(
+    "topics",
+    [
+        pytest.param([], id="empty-list"),
+        pytest.param(["billing", "billing"], id="duplicate"),
+        pytest.param(["billing", "phishing"], id="unknown-label"),
+    ],
+)
+def test_parse_generator_output_rejects_bad_label_lists(
+    multi_questions: QuestionSet, topics: object
+) -> None:
+    doc = json.loads(json.dumps(_MULTI_OUTPUT))
+    doc["answers"]["topics"] = topics
+    with pytest.raises(ValueError, match="missing or invalid"):
+        parse_generator_output(json.dumps(doc), multi_questions)
+
+
+@pytest.mark.parametrize(
+    ("answers", "expected"),
+    [
+        pytest.param({"topics": ["meeting", "billing"]}, 0, id="requested-label-present"),
+        pytest.param({"topics": ["meeting"]}, 1, id="requested-label-absent"),
+        pytest.param({"topics": "billing"}, 0, id="single-id-answer"),
+        pytest.param({}, 1, id="missing-answer"),
+    ],
+)
+def test_count_mismatches_multi_membership(
+    multi_questions: QuestionSet, answers: dict[str, str | list[str]], expected: int
+) -> None:
+    traits = resolve_traits(_MULTI_CONFIG, multi_questions)
+    assert count_mismatches({"topic": "billing"}, traits, answers) == expected

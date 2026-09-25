@@ -61,6 +61,7 @@ def test_shipped_generation_config() -> None:
     )
     assert config.models == expected_models
     assert config.max_attempts == 3
+    assert "every option id that applies (at least one)" in config.system_prompt
     expected_traits = ["category", "urgency", "length", "prompt_injection"]
     assert [trait.name for trait in traits] == expected_traits
     now = datetime(2026, 9, 24, tzinfo=UTC)

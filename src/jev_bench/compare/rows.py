@@ -18,7 +18,7 @@ from pydantic import AwareDatetime, BaseModel
 from jev_bench.compare.raters import Rater
 from jev_bench.emails import Email
 from jev_bench.metrics.distributions import js_divergence, to_matrix
-from jev_bench.questions import AnyQuestion, Distribution, QuestionSet
+from jev_bench.questions import AnyQuestion, Distribution, HardAnswer, QuestionSet
 
 __all__ = [
     "EmailRow",
@@ -38,8 +38,8 @@ class EmailRow(BaseModel):
     subject: str
     generator_model: str
     traits: dict[str, str]
-    reference: dict[str, str]
-    human: dict[str, str]
+    reference: dict[str, HardAnswer]
+    human: dict[str, HardAnswer]
     top: dict[str, dict[str, str]]
     disagreement: float | None
 
@@ -47,7 +47,7 @@ class EmailRow(BaseModel):
 def email_rows(
     emails: Sequence[Email],
     runs: Sequence[Rater],
-    labels: Mapping[str, Mapping[str, str]],
+    labels: Mapping[str, Mapping[str, HardAnswer]],
     base: QuestionSet,
 ) -> list[EmailRow]:
     supported = {rater.id: _supported_questions(rater, base) for rater in runs}
@@ -61,7 +61,7 @@ def _supported_questions(rater: Rater, base: QuestionSet) -> frozenset[str]:
 def _email_row(
     email: Email,
     runs: Sequence[Rater],
-    human: Mapping[str, str],
+    human: Mapping[str, HardAnswer],
     base: QuestionSet,
     supported: SupportedQuestions,
 ) -> EmailRow:

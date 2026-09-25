@@ -117,3 +117,48 @@ def test_reference_rater_warns_on_snapshot_gaps(
     email = EmailFactory(id="gen1.0001", reference_answers={"category": "spam"})
     rater = reference_rater([email], questions, snapshots)
     assert rater.warnings == expected_warnings
+
+
+def _v1_topics(options: dict[str, str]) -> QuestionSet:
+    topics = ChoiceQuestion(type="choice", id="topics", instructions="?", options=options)
+    return QuestionSet(name="v1", questions=(topics,))
+
+
+def test_reference_and_human_raters_split_label_sets_evenly(multi_questions: QuestionSet) -> None:
+    email = EmailFactory(
+        id="gen1.0001", reference_answers={"topics": ["travel", "billing"], "category": "spam"}
+    )
+    reference = reference_rater([email], multi_questions, {"gen1": multi_questions})
+    assert reference.answers["gen1.0001"]["topics"] == {
+        "billing": 0.5,
+        "meeting": 0.0,
+        "travel": 0.5,
+    }
+    human = human_rater(
+        {"gen1.0001": {"topics": ["meeting"]}, "gen1.0002": {"topics": ["nope"]}},
+        multi_questions,
+    )
+    assert human is not None
+    only_meeting = {"billing": 0.0, "meeting": 1.0, "travel": 0.0}
+    assert human.answers == {"gen1.0001": {"topics": only_meeting}}
+
+
+@pytest.mark.parametrize(
+    ("snapshot_options", "expected"),
+    [
+        pytest.param(
+            {"billing": "b", "meeting": "m", "travel": "t"},
+            {"gen1.0001": {"topics": {"billing": 1.0, "meeting": 0.0, "travel": 0.0}}},
+            id="same-options-is-a-one-label-set",
+        ),
+        pytest.param({"billing": "b", "travel": "t"}, {}, id="other-options-is-skipped"),
+    ],
+)
+def test_v1_single_label_reference_for_a_multi_question(
+    multi_questions: QuestionSet,
+    snapshot_options: dict[str, str],
+    expected: dict[str, dict[str, dict[str, float]]],
+) -> None:
+    email = EmailFactory(id="gen1.0001", reference_answers={"topics": "billing"})
+    snapshot = _v1_topics(snapshot_options)
+    assert reference_rater([email], multi_questions, {"gen1": snapshot}).answers == expected

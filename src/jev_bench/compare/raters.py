@@ -12,6 +12,9 @@ Functions:
         its own generation's question-set snapshot, with one warning per generation whose
         snapshot is missing or incompatible for some questions.
     human_rater: build a rater from raw human labels (None when none are usable).
+Hard answers (reference and human) become their distributions (questions.hard_distribution: one-hot,
+or uniform over the labels of a multi question); an answer that is not valid for the question is
+skipped.
 """
 
 from collections.abc import Mapping, Sequence
@@ -20,7 +23,14 @@ from typing import Literal
 from pydantic import BaseModel
 
 from jev_bench.emails import Email
-from jev_bench.questions import AnyQuestion, Distribution, QuestionSet, compatible, one_hot
+from jev_bench.questions import (
+    AnyQuestion,
+    Distribution,
+    HardAnswer,
+    QuestionSet,
+    compatible,
+    hard_distribution,
+)
 from jev_bench.store.runs import Prediction, RunMeta
 
 __all__ = [
@@ -128,7 +138,9 @@ def _generation_warning(
     )
 
 
-def human_rater(labels: Mapping[str, Mapping[str, str]], questions: QuestionSet) -> Rater | None:
+def human_rater(
+    labels: Mapping[str, Mapping[str, HardAnswer]], questions: QuestionSet
+) -> Rater | None:
     answers = {
         email_id: hard for email_id, chosen in labels.items() if (hard := _hard(chosen, questions))
     }
@@ -139,19 +151,20 @@ def human_rater(labels: Mapping[str, Mapping[str, str]], questions: QuestionSet)
     )
 
 
-def _hard(labels: Mapping[str, str], questions: QuestionSet) -> dict[str, Distribution]:
+def _hard(labels: Mapping[str, HardAnswer], questions: QuestionSet) -> dict[str, Distribution]:
     return {
-        question.id: one_hot(question, labels[question.id])
+        question.id: hard
         for question in questions.questions
-        if labels.get(question.id) in question.options
+        if (hard := hard_distribution(question, labels.get(question.id))) is not None
     }
 
 
 def _reference_hard(
-    labels: Mapping[str, str], questions: QuestionSet, snapshot: QuestionSet
+    labels: Mapping[str, HardAnswer], questions: QuestionSet, snapshot: QuestionSet
 ) -> dict[str, Distribution]:
     return {
-        question.id: one_hot(question, labels[question.id])
+        question.id: hard
         for question in questions.questions
-        if labels.get(question.id) in question.options and _supports(snapshot, question)
+        if _supports(snapshot, question)
+        and (hard := hard_distribution(question, labels.get(question.id))) is not None
     }
