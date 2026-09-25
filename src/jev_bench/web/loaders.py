@@ -1,6 +1,12 @@
 """Loads comparison and explorer inputs from the stores, mapping unknown ids to HTTP 404.
 
+Classes:
+    ComparisonInputs: the selected runs, the base question set, their emails, run raters, the
+        reference rater and the human labels; `raters()` is every rater of the report.
 Functions:
+    load_comparison: ComparisonInputs for run ids (HTTP 400 without ids). The base question set is
+        the snapshot of the most recent selected run (by created_at, then id), so the order of the
+        ids never changes the report.
     load_runs: run metas for ids.
     load_emails: emails of generations.
     load_email: one email.
@@ -10,24 +16,54 @@ Functions:
 """
 
 from collections.abc import Sequence
+from typing import NamedTuple
 
 from fastapi import HTTPException
 
-from jev_bench.compare import Rater, run_rater
+from jev_bench.compare import Rater, human_rater, reference_rater, run_rater
 from jev_bench.emails import Email
 from jev_bench.questions import QuestionSet
 from jev_bench.services import Services
+from jev_bench.store.labels import Labels
 from jev_bench.store.runs import RunMeta
 from jev_bench.web.views import load_or_404
 
 __all__ = [
+    "ComparisonInputs",
     "generation_snapshots",
     "generations_of",
+    "load_comparison",
     "load_email",
     "load_emails",
     "load_runs",
     "run_raters",
 ]
+
+
+class ComparisonInputs(NamedTuple):
+    metas: list[RunMeta]
+    base: QuestionSet
+    emails: list[Email]
+    runs: list[Rater]
+    reference: Rater
+    labels: Labels
+
+    def raters(self) -> list[Rater]:
+        human = human_rater(self.labels, self.base)
+        return [*self.runs, self.reference, *([human] if human is not None else [])]
+
+
+def load_comparison(services: Services, run_ids: Sequence[str]) -> ComparisonInputs:
+    metas = load_runs(services, run_ids)
+    if not metas:
+        raise HTTPException(status_code=400, detail="no run ids given")
+    base = max(metas, key=lambda meta: (meta.created_at, meta.id)).question_set
+    generation_ids = generations_of(metas)
+    emails = load_emails(services, generation_ids)
+    snapshots = generation_snapshots(services, generation_ids)
+    reference = reference_rater(emails, base, snapshots)
+    labels = services.labels.for_generations(generation_ids)
+    return ComparisonInputs(metas, base, emails, run_raters(services, metas), reference, labels)
 
 
 def load_runs(services: Services, run_ids: Sequence[str]) -> list[RunMeta]:

@@ -15,6 +15,7 @@ from jev_bench.store.runs import RunMeta
 from jev_bench.web.loaders import (
     generation_snapshots,
     generations_of,
+    load_comparison,
     load_email,
     load_emails,
     load_runs,
@@ -56,6 +57,9 @@ def _run(run_id: str, generation_ids: tuple[str, ...], questions: QuestionSet) -
             lambda s: generation_snapshots(s, ["20260924-100000-missing-0001"]),
             id="generation-snapshot",
         ),
+        pytest.param(
+            lambda s: load_comparison(s, ["20260924-100000-missing-0001"]), id="comparison-run"
+        ),
     ],
 )
 async def test_unknown_ids_are_404(make_services: ServicesFactory, call: ServicesCall) -> None:
@@ -78,3 +82,35 @@ async def test_loaders_return_data(make_services: ServicesFactory) -> None:
     assert generations_of([run, run]) == [generation_id]
     snapshots = generation_snapshots(services, [generation_id])
     assert snapshots == {generation_id: services.question_set()}
+
+
+async def test_load_comparison_needs_run_ids(make_services: ServicesFactory) -> None:
+    with pytest.raises(HTTPException) as info:
+        load_comparison(make_services(_unused), [])
+    assert info.value.status_code == 400
+
+
+@pytest.mark.parametrize(
+    ("labelled", "raters"),
+    [
+        pytest.param(False, ["20260924-100000-jev-x-0001", "reference"], id="without-labels"),
+        pytest.param(True, ["20260924-100000-jev-x-0001", "reference", "human"], id="with-labels"),
+    ],
+)
+async def test_load_comparison(
+    make_services: ServicesFactory, labelled: bool, raters: list[str]
+) -> None:
+    services = make_services(_unused)
+    generation_id = seed_generation(services)
+    older = _run("20260924-090000-jev-old-0001", (generation_id,), services.question_set())
+    newer = _run("20260924-100000-jev-x-0001", (generation_id,), services.question_set())
+    newer_questions = newer.question_set.model_copy(update={"name": "newest"})
+    services.runs.save(older.model_copy(update={"created_at": datetime(2026, 9, 23, tzinfo=UTC)}))
+    services.runs.save(newer.model_copy(update={"question_set": newer_questions}))
+    if labelled:
+        await services.labels.update(f"{generation_id}.0001", {"category": "spam"})
+    inputs = load_comparison(services, [newer.id])
+    assert [meta.id for meta in inputs.metas] == [newer.id]
+    assert len(inputs.emails) == 2
+    assert [rater.id for rater in inputs.raters()] == raters
+    assert load_comparison(services, [older.id, newer.id]).base.name == "newest"
