@@ -7,6 +7,7 @@ import pytest
 from tests.factories import ServicesFactory
 
 from jev_bench.benchmark_config import JevParams
+from jev_bench.store.analyses import AnalysisMeta
 from jev_bench.store.generations import GenerationMeta
 from jev_bench.store.runs import RunMeta
 
@@ -44,6 +45,7 @@ async def test_configs_are_read_from_the_config_dir(make_services: ServicesFacto
         "embeddings",
     ]
     assert services.generation_config().models == ("gen/a", "gen/b")
+    assert services.analysis_config().max_output_tokens == 500
 
 
 async def test_sweep_interrupted_marks_orphans(make_services: ServicesFactory) -> None:
@@ -74,8 +76,23 @@ async def test_sweep_interrupted_marks_orphans(make_services: ServicesFactory) -
         question_set=questions,
         config=services.generation_config(),
     )
+    analysis = AnalysisMeta(
+        id="20260924-100000-analysis-0001",
+        created_at=created,
+        model="m",
+        run_ids=(run.id,),
+        generation_ids=(generation.id,),
+        system_prompt="S",
+        user_prompt="U",
+        email_refs={},
+        n_emails=0,
+        n_disputed=0,
+        max_output_tokens=1,
+    )
     services.runs.save(run)
     services.generations.save(generation)
-    assert sorted(services.sweep_interrupted()) == sorted([run.id, generation.id])
+    services.analyses.save(analysis)
+    assert sorted(services.sweep_interrupted()) == sorted([run.id, generation.id, analysis.id])
     assert services.runs.get(run.id).status == "interrupted"
     assert services.generations.get(generation.id).status == "interrupted"
+    assert services.analyses.get(analysis.id).status == "interrupted"

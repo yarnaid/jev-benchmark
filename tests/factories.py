@@ -4,7 +4,8 @@ Classes:
     PartyFactory: named mailbox.
     EmailFactory: generated email with deterministic ids and a fixed sent_at.
     FakeOpenRouter: MockTransport handler serving /v1/models, /alpha/decisions,
-        /v1/chat/completions and /v1/embeddings for the mini question set.
+        /v1/chat/completions and /v1/embeddings for the mini question set. A chat request without
+        `response_format` is an analysis: it streams `analysis_parts` with `analysis_finish`.
 Functions:
     chat_body: OpenRouter chat completion response.
     sse_body: OpenRouter streaming chat completion response.
@@ -15,11 +16,13 @@ Functions:
     services_of: typed access to a TestClient's app.state.services.
     poll: GET a path repeatedly until a predicate on its JSON body holds, or fail.
 Constants:
-    MINI_QUESTIONS_TOML, MINI_BENCHMARK_TOML, MINI_GENERATION_TOML: mini config file contents
+    MINI_QUESTIONS_TOML, MINI_BENCHMARK_TOML, MINI_GENERATION_TOML, MINI_ANALYSIS_TOML: mini
+        config file contents
         (the mini question set has a multi-label "topics" question with threshold 0.75; the fake
         chat answer puts "meeting" exactly at 0.75 * max, the fake Jev answer below it).
     CHAT_PARAMETERS: the fake catalog's supported_parameters for chat models (like the real
         Claude Sonnet 5 / GPT-5.6 Terra entries: no `temperature`).
+    ANALYSIS_PARTS: the fake analyst's streamed Markdown.
 Types:
     ClientFactory: type of the make_client fixture.
     ServicesFactory: type of the make_services fixture.
@@ -220,11 +223,21 @@ stratify = true
 """
 
 
+MINI_ANALYSIS_TOML = """
+default_model = "anthropic/claude-sonnet-5"
+max_disputed_emails = 2
+max_output_tokens = 500
+system_prompt = "Analyse.\\n$questions"
+user_prompt = "$generations\\n$runs\\n$report\\n$emails\\n$disputed"
+"""
+
+
 def write_mini_config(config_dir: Path) -> None:
     config_dir.mkdir(parents=True, exist_ok=True)
     (config_dir / "questions.toml").write_text(MINI_QUESTIONS_TOML, encoding="utf-8")
     (config_dir / "benchmark.toml").write_text(MINI_BENCHMARK_TOML, encoding="utf-8")
     (config_dir / "generation.toml").write_text(MINI_GENERATION_TOML, encoding="utf-8")
+    (config_dir / "analysis.toml").write_text(MINI_ANALYSIS_TOML, encoding="utf-8")
 
 
 def mini_settings(root: Path, api_key: str | None = None) -> Settings:
@@ -285,6 +298,7 @@ JEV_ANSWERS: dict[str, Any] = {
     },
 }
 CHAT_PARAMETERS = ("max_tokens", "reasoning", "response_format", "structured_outputs")
+ANALYSIS_PARTS = ("## Executive summary\n", "- Jev agrees with the reference.\n")
 _CATALOG: dict[str, list[dict[str, Any]]] = {
     "text": [
         {
@@ -327,10 +341,17 @@ def _vector(text: str) -> list[float]:
 
 class FakeOpenRouter:
     def __init__(
-        self, *, models_status: int = 200, chat_parameters: tuple[str, ...] = CHAT_PARAMETERS
+        self,
+        *,
+        models_status: int = 200,
+        chat_parameters: tuple[str, ...] = CHAT_PARAMETERS,
+        analysis_parts: Sequence[str] = ANALYSIS_PARTS,
+        analysis_finish: str = "stop",
     ) -> None:
         self.models_status = models_status
         self.chat_parameters = chat_parameters
+        self.analysis_parts = analysis_parts
+        self.analysis_finish = analysis_finish
         self.requests: list[httpx2.Request] = []
 
     def __call__(self, request: httpx2.Request) -> httpx2.Response:
@@ -372,6 +393,8 @@ class FakeOpenRouter:
         return httpx2.Response(200, json={"data": models})
 
     def _chat(self, body: dict[str, Any]) -> httpx2.Response:
+        if "response_format" not in body:
+            return self._analysis(body)
         if body["response_format"]["json_schema"]["name"] == "email_generation":
             return httpx2.Response(200, json=chat_body(generator_output(), model=body["model"]))
         if not body.get("stream"):
@@ -384,6 +407,12 @@ class FakeOpenRouter:
         return httpx2.Response(
             200, content=sse_body([content], model=body["model"]), headers=headers
         )
+
+    def _analysis(self, body: dict[str, Any]) -> httpx2.Response:
+        stream = sse_body(
+            self.analysis_parts, finish_reason=self.analysis_finish, model=body["model"]
+        )
+        return httpx2.Response(200, content=stream, headers={"content-type": "text/event-stream"})
 
 
 def seed_generation(
