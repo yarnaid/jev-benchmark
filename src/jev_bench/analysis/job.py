@@ -8,8 +8,9 @@ Classes:
     AnalysisDeps: collaborators of an analysis job (`api_key` is a `SecretStr`, never persisted).
 Functions:
     execute_analysis: job body (always finalizes the record; re-raises only CancelledError). The
-        result is the final reply's text; a truncated or empty reply fails the analysis but keeps
-        its text, and a call that fails before any reply keeps the streamed preview.
+        result is the final reply's text (a streamed body always carries exactly one choice); a
+        truncated or empty reply fails the analysis but keeps its text, and a call that fails
+        before any reply keeps the streamed preview.
     mark_interrupted_analyses: startup sweep for analyses left `running` (the preview is kept).
 """
 
@@ -127,10 +128,7 @@ def _outcome(
 
 
 def _reply_text(body: JsonObject) -> str:
-    try:
-        return str(body["choices"][0]["message"]["content"])
-    except KeyError, IndexError, TypeError:
-        return ""
+    return str(body["choices"][0]["message"]["content"])
 
 
 def _finisher(

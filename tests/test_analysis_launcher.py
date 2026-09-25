@@ -65,6 +65,22 @@ async def test_invalid_requests(
 
 
 @pytest.mark.parametrize(
+    ("name", "content"),
+    [
+        pytest.param("analysis.toml", "x = [", id="broken-analysis-toml"),
+        pytest.param("benchmark.toml", "[[columns]]", id="invalid-benchmark-toml"),
+    ],
+)
+async def test_invalid_config_is_a_launch_error(
+    make_services: ServicesFactory, multi_questions: QuestionSet, name: str, content: str
+) -> None:
+    services = make_services(FakeOpenRouter())
+    (services.settings.config_dir / name).write_text(content, encoding="utf-8")
+    with pytest.raises(AnalysisLaunchError, match="invalid analysis or benchmark config"):
+        await estimate_analysis(_request(), build_source(multi_questions), services)
+
+
+@pytest.mark.parametrize(
     "fields",
     [
         pytest.param({"runs": []}, id="no-runs"),
