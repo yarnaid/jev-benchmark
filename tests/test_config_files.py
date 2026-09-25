@@ -7,34 +7,49 @@ from jev_bench.benchmark_config import load_benchmark_config
 from jev_bench.generation.config import load_generation_config
 from jev_bench.generation.plan import build_plan, resolve_traits
 from jev_bench.generation.prompt import render_prompts
-from jev_bench.questions import load_question_set
+from jev_bench.questions import MultiQuestion, load_question_set
 
 CONFIG_DIR = Path(__file__).resolve().parents[1] / "config"
 
 
 def test_shipped_question_set() -> None:
     shipped = load_question_set(CONFIG_DIR / "questions.toml")
+    assert shipped.name == "email-triage-v2"
     assert shipped.ids == (
         "category",
         "urgency",
         "importance",
+        "sentiment",
+        "confidentiality",
         "needs_reply",
         "action_required",
+        "deadline",
+        "attachment_review",
+        "delegatable",
+        "escalation",
         "skippable",
         "should_delete",
+        "is_automated",
         "llm_safe",
         "malicious",
+        "impersonation",
         "sensitive_data",
-        "sentiment",
     )
-    assert len(shipped.get("category").options) == 20
-    urgency_ids = ("no_action", "whenever", "this_week", "today", "immediately")
-    assert shipped.get("urgency").option_ids == urgency_ids
-    importance_ids = ("trivial", "low", "moderate", "high")
-    assert shipped.get("importance").option_ids == importance_ids
-    sentiment_ids = ("negative", "neutral", "positive")
-    assert shipped.get("sentiment").option_ids == sentiment_ids
-    assert [q.type for q in shipped.questions].count("noul") == 7
+    category = shipped.get("category")
+    assert isinstance(category, MultiQuestion)
+    assert (len(category.options), category.threshold) == (20, 0.8)
+    levels = {
+        "urgency": ("no_action", "whenever", "this_week", "today", "immediately"),
+        "importance": ("trivial", "low", "moderate", "high"),
+        "sentiment": ("negative", "neutral", "positive"),
+        "confidentiality": ("public", "internal", "confidential", "restricted"),
+    }
+    for question_id, option_ids in levels.items():
+        assert (shipped.get(question_id).type, shipped.get(question_id).option_ids) == (
+            "score",
+            option_ids,
+        )
+    assert [q.type for q in shipped.questions].count("noul") == 13
 
 
 def test_shipped_benchmark_config() -> None:

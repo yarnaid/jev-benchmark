@@ -10,6 +10,9 @@ goes through OpenRouter.
 
 Design: `docs/superpowers/specs/2026-09-24-jev-benchmark-design.md` (§14 records revisions made while
 planning). Implementation plan: `docs/superpowers/plans/2026-09-24-jev-benchmark.md`.
+Question model v2 (multi-label category, 0–100 scores, new questions): spec
+`docs/superpowers/specs/2026-09-25-question-model-v2-design.md`, plan
+`docs/superpowers/plans/2026-09-25-question-model-v2.md`.
 
 **All repository content is in English** (code, docs, UI copy, prompts, commits).
 
@@ -36,9 +39,21 @@ node --test tests/js/                           # JS unit tests (Node's runner, 
 ## Architecture (read these together)
 
 - **The question set is the single source of truth** (`config/questions.toml` → `questions.py`).
-  - Types mirror Jev's primitives (`choice` / `score` / `noul`).
-  - Every answer from every source is normalized to a distribution `{option_id: p}`; `noul` becomes
-    `{yes, no}`.
+  - Types mirror Jev's primitives (`choice` / `score` / `noul`) plus `multi` (multi-label).
+  - Every answer from every source is normalized to a distribution `{option_id: p}` summing to 1; `noul`
+    becomes `{yes, no}`.
+  - A multi question is answered like a `choice`; Jev gets it as a native Decisions `choice`.
+  - Its **applied labels** are the options with `p >= threshold × max(p)`, so the top option always applies:
+    - the rule is implemented once in Python, in `metrics.multilabel.relative_labels`;
+    - the UI mirror is `answers.appliedLimit`;
+    - the threshold is the question's `threshold` (default 0.8), overridable with `?threshold=` on
+      `/api/compare` and `/api/emails` (the UI slider).
+  - Hard answers (generator reference, human labels) are an option id, or a non-empty list of unique option
+    ids for multi (`questions.HardAnswer`, `hard_distribution`). A label list becomes a uniform distribution
+    over its labels.
+  - `compatible()` is shape-based: choice, score and multi questions with the same option ids are
+    comparable, so v1 runs stay comparable on `category` and `sentiment`.
+  - Score questions also get a 0–100 score (`metrics.distributions.score_0_100`, the only implementation).
   - Jev payloads (`classifiers/jev.py`), LLM JSON schemas (`classifiers/llm_schema.py`), embedding option
     texts, generator schemas, metrics and the UI are all derived from it.
 - **Columns** (`config/benchmark.toml` → `benchmark_config.py`) are `decisions` / `chat` / `embeddings`.
@@ -68,7 +83,12 @@ node --test tests/js/                           # JS unit tests (Node's runner, 
     snapshot is incompatible with the base is skipped with a warning;
   - pairwise agreement / κ (quadratic for score) / JSD / Pearson / Brier with bootstrap CIs, plus Fleiss'
     κ over runs;
-  - a per-email disagreement index.
+  - a per-email disagreement index;
+  - multi-label questions use `metrics/multilabel.py` via `compare/multi.py`:
+    - over the applied label sets: exact-set match, Jaccard, micro-F1, macro κ, macro Fleiss' κ, label counts;
+    - over the distributions, as for choice: JSD, entropy, confidence and Brier (against a uniform target);
+  - `GET /api/compare` takes its base question set from the **newest** selected run's snapshot, so the URL
+    order of `runs=` never changes the report.
 - **Web**: `web/app.py` (lifespan builds `Services`) exposes JSON routes under `/api` (`web/routes/`) and a
   build-free UI in `web/static/` (Bootstrap 5.3 + Chart.js from jsDelivr with SRI).
 - **CLI**: `cli.py` (typer, lazy imports) delegates to `cli_jobs.py`, which uses the same launchers and
