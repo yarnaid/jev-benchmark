@@ -9,6 +9,8 @@ Functions:
     fleiss_kappa: Fleiss' kappa over an (items x raters) label matrix (None when undefined).
     pearson_r: Pearson correlation (None when a side is constant or too short).
     brier_score: multi-class Brier score of probabilities against hard labels.
+    brier_to_target: multi-class Brier score of probabilities against target distributions (for
+        example a uniform split over a multi-label reference's labels).
 """
 
 import numpy as np
@@ -17,6 +19,7 @@ from jev_bench.metrics.distributions import FloatArray, IntArray
 
 __all__ = [
     "brier_score",
+    "brier_to_target",
     "cohen_kappa",
     "confusion_batch",
     "disagreement_weights",
@@ -90,5 +93,8 @@ def pearson_r(x: FloatArray, y: FloatArray) -> float | None:
 
 
 def brier_score(probabilities: FloatArray, labels: IntArray) -> float:
-    target = np.eye(probabilities.shape[1])[labels]
+    return brier_to_target(probabilities, np.eye(probabilities.shape[1])[labels])
+
+
+def brier_to_target(probabilities: FloatArray, target: FloatArray) -> float:
     return float(((probabilities - target) ** 2).sum(axis=1).mean())

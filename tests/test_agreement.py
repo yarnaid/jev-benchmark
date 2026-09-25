@@ -7,6 +7,7 @@ from hypothesis import strategies as st
 
 from jev_bench.metrics.agreement import (
     brier_score,
+    brier_to_target,
     cohen_kappa,
     confusion_batch,
     disagreement_weights,
@@ -143,3 +144,17 @@ def test_pearson_r(x: list[float], y: list[float], expected: float | None) -> No
 )
 def test_brier_score(probabilities: list[list[float]], labels: list[int], expected: float) -> None:
     assert brier_score(np.array(probabilities), np.array(labels)) == pytest.approx(expected)
+
+
+@pytest.mark.parametrize(
+    ("probabilities", "target", "expected"),
+    [
+        pytest.param([[0.5, 0.45, 0.05]], [[0.5, 0.5, 0.0]], 0.005, id="uniform-two-label-target"),
+        pytest.param([[0.7, 0.2, 0.1]], [[1.0, 0.0, 0.0]], 0.14, id="one-hot-target"),
+        pytest.param([[0.5, 0.5]], [[0.5, 0.5]], 0.0, id="identical"),
+    ],
+)
+def test_brier_to_target(
+    probabilities: list[list[float]], target: list[list[float]], expected: float
+) -> None:
+    assert brier_to_target(np.array(probabilities), np.array(target)) == pytest.approx(expected)
