@@ -6,6 +6,8 @@ Constants:
 Functions:
     generate_and_wait: run one generation to completion; returns the exit code.
     run_and_wait: run one benchmark column to completion; returns the exit code.
+    write_log: loguru sink printing through the shared rich console, so log lines appear above
+        the live progress bar instead of breaking it.
 """
 
 import asyncio
@@ -16,6 +18,7 @@ import httpx2
 from pydantic import ValidationError
 from rich.console import Console
 from rich.progress import BarColumn, MofNCompleteColumn, Progress, TextColumn, TimeElapsedColumn
+from rich.text import Text
 
 from jev_bench.generation.launcher import GenerationRequest, launch_generation
 from jev_bench.openrouter import build_http_client
@@ -28,6 +31,7 @@ __all__ = [
     "console",
     "generate_and_wait",
     "run_and_wait",
+    "write_log",
 ]
 
 NO_KEY = "OPENROUTER_API_KEY is not set (environment or .env)."
@@ -120,6 +124,10 @@ async def _watch(services: Services, job_id: str, task: asyncio.Task[None], labe
                 )
             await asyncio.wait({task}, timeout=0.5)
     await task
+
+
+def write_log(message: str) -> None:
+    console.print(Text.from_ansi(message.rstrip("\n")), soft_wrap=True)
 
 
 def _report(status: str, summary: str, error: str | None) -> int:

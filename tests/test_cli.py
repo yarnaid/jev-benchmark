@@ -113,9 +113,11 @@ def test_configures_logging_before_the_job(
     monkeypatch: pytest.MonkeyPatch, args: list[str], attr: str
 ) -> None:
     calls: list[str] = []
-    monkeypatch.setattr(
-        "jev_bench.log_setup.configure_logging", lambda **_: calls.append("logging")
-    )
+
+    def configure(**kwargs: Any) -> None:
+        calls.append("logging" if kwargs.get("write") is cli_jobs.write_log else "other-sink")
+
+    monkeypatch.setattr("jev_bench.log_setup.configure_logging", configure)
 
     async def fake(*_: Any, **__: Any) -> int:
         calls.append("job")

@@ -68,11 +68,11 @@ def generate(
     """Generate a new set of synthetic emails with reference answers."""
     import asyncio
 
+    from jev_bench import cli_jobs
     from jev_bench.log_setup import configure_logging
 
-    configure_logging()
+    configure_logging(write=cli_jobs.write_log)
 
-    from jev_bench import cli_jobs
     from jev_bench.generation.launcher import GenerationRequest
 
     request = GenerationRequest(
@@ -97,10 +97,8 @@ def run(
     """Run one benchmark column on the given generations."""
     import asyncio
 
+    from jev_bench import cli_jobs
     from jev_bench.log_setup import configure_logging
 
-    configure_logging()
-
-    from jev_bench import cli_jobs
-
+    configure_logging(write=cli_jobs.write_log)
     raise typer.Exit(asyncio.run(cli_jobs.run_and_wait(column, generations, model, mode)))

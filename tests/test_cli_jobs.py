@@ -6,7 +6,7 @@ import httpx2
 import pytest
 from tests.factories import FakeOpenRouter, mini_settings, seed_generation
 
-from jev_bench.cli_jobs import generate_and_wait, run_and_wait
+from jev_bench.cli_jobs import console, generate_and_wait, run_and_wait, write_log
 from jev_bench.generation.launcher import GenerationRequest
 from jev_bench.services import Services
 
@@ -105,3 +105,9 @@ async def test_failed_run_is_exit_1(tmp_path: Path) -> None:
     generation_id = seed_generation(Services(settings, http))
     assert await run_and_wait("jev", [generation_id], None, None, settings=settings, http=http) == 1
     await http.aclose()
+
+
+def test_log_lines_are_written_through_the_rich_console() -> None:
+    with console.capture() as captured:
+        write_log("\x1b[33mWARNING\x1b[0m | item 18 (z-ai/glm-5.3) failed\n")
+    assert captured.get() == "WARNING | item 18 (z-ai/glm-5.3) failed\n"

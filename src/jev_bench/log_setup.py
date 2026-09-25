@@ -1,11 +1,13 @@
 """Process-wide loguru configuration for CLI and web entry points.
 
 Functions:
-    configure_logging: replace the default sink with one safe, no-diagnose stderr sink.
+    configure_logging: replace the default sink with one safe, no-diagnose sink (stderr, or a
+        caller's `write` callable such as a rich console that keeps a live progress bar intact).
 """
 
 import os
 import sys
+from collections.abc import Callable
 
 from loguru import logger
 
@@ -14,10 +16,10 @@ __all__ = [
 ]
 
 
-def configure_logging(*, debug: bool = False) -> None:
+def configure_logging(*, debug: bool = False, write: Callable[[str], None] | None = None) -> None:
     logger.remove()
     logger.add(
-        sys.stderr,
+        write or sys.stderr,
         level="DEBUG" if debug else "INFO",
         diagnose=False,
         backtrace=False,

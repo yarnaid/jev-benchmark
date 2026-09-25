@@ -57,6 +57,19 @@ def test_configure_logging_level(
     assert ("debug-line" in captured.err) is expect_debug_line
 
 
+def test_configure_logging_can_write_through_a_callable() -> None:
+    lines: list[str] = []
+    configure_logging(write=lines.append)
+    secret = "sk-or-v1-SUPERSECRET"
+    try:
+        _call_with_local_secret(secret)
+    except RuntimeError as exc:
+        logger.opt(exception=exc).warning("item failed")
+    assert len(lines) == 1
+    assert "item failed" in lines[0]
+    assert secret not in lines[0]
+
+
 class _FakeStderr:
     def __init__(self, tty: bool) -> None:
         self._tty = tty
