@@ -3,7 +3,8 @@
  * labels of a multi-label question; level and 0-100 score of a score question) with the generator
  * reference (match / partial / mismatch), sort by disagreement, and open an email to see every
  * distribution and edit human labels. Without ?runs= the latest completed run per column on the
- * selected generations is pre-selected; the label-threshold slider re-fetches the rows.
+ * selected generations is pre-selected; the label-threshold slider re-fetches the rows. ?email=<id>
+ * opens that email's detail (links from an analysis report).
  * Exports: none (page entry point).
  */
 import { answerText, asLabels, setMatch, withScore } from "./answers.js";
@@ -53,6 +54,8 @@ async function main() {
   state.selectedRuns = requestedRuns.length ? requestedRuns : latestCompletedPerColumn(state.runs, state.selectedGenerations);
   renderPickers();
   await loadRows();
+  const email = params.get("email");
+  if (email) await openEmail(email);
 }
 
 function renderPickers() {

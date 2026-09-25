@@ -50,6 +50,12 @@ export const api = {
     request("GET", `/emails${query({ generations: generationIds.join(","), runs: runIds.join(","), threshold })}`),
   email: (id, runIds = []) => request("GET", `/emails/${segment(id)}${query({ runs: runIds.join(",") })}`),
   putLabel: (id, answers) => request("PUT", `/labels/${segment(id)}`, { body: { answers } }),
+  analysisDefaults: () => request("GET", "/analysis/defaults"),
+  estimateAnalysis: (body) => request("POST", "/analyses/estimate", { body }),
+  createAnalysis: (body) => request("POST", "/analyses", { body, withKey: true }),
+  analyses: () => request("GET", "/analyses"),
+  analysis: (id) => request("GET", `/analyses/${segment(id)}`),
+  cancelAnalysis: (id) => request("POST", `/analyses/${segment(id)}/cancel`),
 };
 
 export const needsKey = (error) => error instanceof ApiError && error.status === 400 && error.message.includes("API key");

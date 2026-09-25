@@ -30,6 +30,13 @@ PAGE_MODULES = (
     "column-card.js",
     "report-summary.js",
     "option-order.js",
+    "analyze.js",
+    "analysis-result.js",
+    "analysis-setup.js",
+    "analysis-links.js",
+    "prompt-editor.js",
+    "markdown.js",
+    "markdown-render.js",
 )
 
 

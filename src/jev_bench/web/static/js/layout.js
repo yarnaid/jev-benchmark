@@ -17,6 +17,7 @@ const PAGES = [
   ["/generations.html", "Generations", "envelope-paper"],
   ["/explorer.html", "Explorer", "search"],
   ["/runs.html", "Runs", "clock-history"],
+  ["/analyze.html", "Analyze", "stars"],
   ["/help.html", "Help", "question-circle"],
 ];
 

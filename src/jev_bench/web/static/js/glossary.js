@@ -71,6 +71,17 @@ export const GLOSSARY = [
       ["human", "Human label", "Your own answer. Once saved, it is compared as a separate rater in the Benchmark report."],
     ],
   },
+  {
+    title: "Analyze",
+    entries: [
+      ["analyst_model", "Analyst model", "The AI model that reads all the results and writes the assessment. It does not classify emails itself. Any OpenRouter chat model works; type its id or pick a suggestion."],
+      ["disputed_emails", "Disputed emails", "How many of the emails the runs disagree on most are sent to the analyst in full, so it can explain the disagreements. More emails give more evidence but cost more."],
+      ["prompts", "Instructions", "What the analyst is told to do. Placeholders such as $report are replaced with the data before sending. Your edits are kept in this browser; \"Reset to default\" restores the text from config/analysis.toml."],
+      ["analysis_estimate", "Estimated cost", "An upper bound: the instructions and data at the model's input price, plus the full output budget at its output price. The real cost is usually lower, because the answer is shorter than the budget."],
+      ["context_window", "Context window", "The most text the model can read and write in one request. The instructions and data plus the output budget must fit in it."],
+      ["run_names", "R1, R2, …", "The analyst refers to the runs by these names; the legend shows which model each one is. \"ref\" is the generator's intended answer and \"human\" your labels."],
+    ],
+  },
 ];
 
 const BY_KEY = new Map(GLOSSARY.flatMap((group) => group.entries.map(([key, label, text]) => [key, { label, text }])));
