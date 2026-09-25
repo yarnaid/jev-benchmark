@@ -66,6 +66,67 @@ async def test_post_json_sends_key_path_and_body(make_client: ClientFactory) -> 
     assert json.loads(request.content) == {"input": ["x"]}
 
 
+_OPENAI_401 = json.dumps(
+    {
+        "error": {
+            "message": "Incorrect API key provided: sk-proj-" + "*" * 44 + "Jjkr. See the docs.",
+            "type": "invalid_request_error",
+            "code": "invalid_api_key",
+            "param": None,
+        },
+        "status": 401,
+    },
+    indent=2,
+)
+
+
+@pytest.mark.parametrize(
+    ("step", "message"),
+    [
+        pytest.param(
+            _json(401, {"error": {"code": 401, "message": f"HTTP 401: {_OPENAI_401}"}}),
+            "HTTP 401: Incorrect API key provided: sk-proj-…Jjkr. See the docs.",
+            id="nested-upstream-error-is-unwrapped-and-masked",
+        ),
+        pytest.param(
+            _json(
+                401, {"error": {"message": "Invalid key", "metadata": {"provider_name": "OpenAI"}}}
+            ),
+            "HTTP 401: OpenAI: Invalid key",
+            id="provider-name-is-shown",
+        ),
+        pytest.param(
+            _json(400, {"error": {"message": "bad key sk-or-v1-abcdef0123456789"}}),
+            "HTTP 400: bad key sk-or-v1-…6789",
+            id="echoed-key-is-masked",
+        ),
+        pytest.param(
+            _text(400, "plain sk-abc123def456ghi789 text"),
+            "HTTP 400: plain sk-…i789 text",
+            id="text-body-key-is-masked",
+        ),
+        pytest.param(
+            _json(
+                200, {"error": {"code": 400, "message": 'HTTP 400: {"error": {"message": "no"}}'}}
+            ),
+            "provider error: no",
+            id="embedded-nested-error-is-unwrapped",
+        ),
+        pytest.param(
+            _json(400, {"error": {"message": "HTTP 400: {not json"}}),
+            "HTTP 400: HTTP 400: {not json",
+            id="unparseable-nested-error-is-kept",
+        ),
+    ],
+)
+async def test_error_messages_are_readable_and_masked(
+    make_client: ClientFactory, step: Step, message: str
+) -> None:
+    with pytest.raises(OpenRouterError) as info:
+        await make_client(Script(step)).post_json("/v1/embeddings", {}, api_key="k")
+    assert str(info.value) == message
+
+
 @pytest.mark.parametrize(
     ("steps", "calls", "status", "retryable", "fatal"),
     [

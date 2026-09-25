@@ -5,7 +5,9 @@ Constants:
     FATAL_STATUSES: abort the whole job: 401/402/403 (key or credits) and 404 (unknown model, or
         no provider can serve the requested parameters; every request would fail the same way).
 Classes:
-    OpenRouterError: HTTP / protocol failure with `status`, `retryable` and `fatal`.
+    OpenRouterError: HTTP / protocol failure with `status`, `retryable` and `fatal`. Its message
+        unwraps an upstream provider's nested error, names the provider when OpenRouter reports
+        it, and masks any `sk-…` key fragment (keeping the last four characters).
     ChatContentError: a chat completion carries no usable assistant content.
     ApiResponse: parsed JSON body plus client-observed latency.
     OpenRouterClient: per-call API keys over one shared `httpx2.AsyncClient`.
@@ -50,6 +52,9 @@ CHAT_PATH = "/v1/chat/completions"
 FATAL_STATUSES: frozenset[int] = frozenset({401, 402, 403, 404})
 RETRY_STATUSES: frozenset[int] = frozenset({408, 429, 500, 502, 503, 504, 524, 529})
 _FENCE = re.compile(r"^```[A-Za-z0-9_-]*\s*(.*?)\s*```$", re.DOTALL)
+_NESTED_ERROR = re.compile(r"^HTTP \d{3}: (\{.*\})$", re.DOTALL)
+_KEY = re.compile(r"\bsk-[A-Za-z0-9*_-]{12,}")
+_KEY_PREFIX = re.compile(r"sk-(?:[a-z0-9]+-){0,2}")
 
 
 class OpenRouterError(Exception):
@@ -239,9 +244,44 @@ def _error_message(response: httpx2.Response) -> str:
     try:
         payload = response.json()
     except ValueError:
-        return response.text[:500]
+        return _mask_keys(response.text[:500])
     error = payload.get("error") if isinstance(payload, dict) else None
-    return str(error.get("message") or error) if isinstance(error, dict) else response.text[:500]
+    if not isinstance(error, dict):
+        return _mask_keys(response.text[:500])
+    return _provider_message(error)
+
+
+def _provider_message(error: Mapping[str, Any]) -> str:
+    message = _unwrap_nested(str(error.get("message") or error))
+    metadata = error.get("metadata")
+    provider = metadata.get("provider_name") if isinstance(metadata, dict) else None
+    text = f"{provider}: {message}" if isinstance(provider, str) and provider else message
+    return _mask_keys(text)
+
+
+def _unwrap_nested(message: str) -> str:
+    nested = _NESTED_ERROR.match(message)
+    if nested is None:
+        return message
+    try:
+        inner = json.loads(nested.group(1))
+    except ValueError:
+        return message
+    error = inner.get("error") if isinstance(inner, dict) else None
+    inner_message = error.get("message") if isinstance(error, dict) else None
+    return inner_message if isinstance(inner_message, str) and inner_message else message
+
+
+def _mask_keys(text: str) -> str:
+    return _KEY.sub(_masked, text)
+
+
+def _masked(match: re.Match[str]) -> str:
+    token = match.group(0)
+    prefix = _KEY_PREFIX.match(token)
+    head = prefix.group(0) if prefix else "sk-"
+    tail = token[-4:]
+    return f"{head}…{tail}" if "*" not in tail else f"{head}…"
 
 
 def _json_body(response: httpx2.Response) -> JsonObject:
@@ -263,7 +303,7 @@ def _raise_embedded_error(payload: Mapping[str, Any]) -> None:
     code = error.get("code")
     status = code if isinstance(code, int) and not isinstance(code, bool) else None
     raise OpenRouterError(
-        f"provider error: {error.get('message') or error}",
+        f"provider error: {_provider_message(error)}",
         status=status,
         retryable=status is None or status in RETRY_STATUSES,
     )
