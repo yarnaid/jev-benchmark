@@ -30,7 +30,7 @@ async def test_estimate_uses_catalog_prices(
     estimate = await estimate_analysis(_request(), build_source(multi_questions), services)
     assert estimate.model == "anthropic/claude-sonnet-5"
     assert (estimate.max_output_tokens, estimate.context_length) == (500, 1_000_000)
-    assert (estimate.n_emails, estimate.n_disputed, estimate.fits) == (3, 2, True)
+    assert (estimate.n_emails, estimate.n_disputed, estimate.fits) == (3, 1, True)
     assert estimate.input_tokens > 100
     assert estimate.cost == pytest.approx(estimate.input_tokens * 0.000002 + 500 * 0.00001)
 
@@ -94,12 +94,8 @@ async def test_launch_runs_the_analysis(
         (RUN_A, RUN_B),
         (GENERATION,),
     )
-    assert (meta.threshold, meta.n_emails, meta.n_disputed, meta.max_output_tokens) == (
-        0.5,
-        3,
-        2,
-        500,
-    )
+    counts = (meta.threshold, meta.n_emails, meta.n_disputed, meta.max_output_tokens)
+    assert counts == (0.5, 3, 1, 500)
     assert meta.email_refs["e002"] == f"{GENERATION}.0002"
     assert meta.id.startswith("20260925-120000-analysis-")
     await task

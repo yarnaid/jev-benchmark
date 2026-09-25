@@ -6,7 +6,8 @@ Classes:
         column).
 Functions:
     email_tables: one table per question (ref, human when any email has human labels, R1…).
-    disputed_ids: the ids of the `limit` emails with the highest disagreement index, highest first.
+    disputed_ids: the ids of the `limit` emails with the highest disagreement index, highest first
+        (ties keep email order); emails the runs fully agree on (index 0) are never disputed.
     disputed_emails: those emails in full (their `to_state()` JSON plus the ref).
 """
 
@@ -89,7 +90,7 @@ def _with_score(text: str, scores: Mapping[str, float], question: AnyQuestion) -
 
 
 def disputed_ids(rows: Sequence[EmailRow], limit: int) -> list[str]:
-    scored = [row for row in rows if row.disagreement is not None]
+    scored = [row for row in rows if row.disagreement]
     ranked = sorted(scored, key=lambda row: -(row.disagreement or 0.0))
     return [row.id for row in ranked[:limit]]
 

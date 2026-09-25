@@ -7,6 +7,7 @@ Functions:
     load_comparison: ComparisonInputs for run ids (HTTP 400 without ids). The base question set is
         the snapshot of the most recent selected run (by created_at, then id), so the order of the
         ids never changes the report.
+    load_analysis_source: the AnalysisSource of an analysis over run ids at a label threshold.
     load_runs: run metas for ids.
     load_emails: emails of generations.
     load_email: one email.
@@ -20,9 +21,17 @@ from typing import NamedTuple
 
 from fastapi import HTTPException
 
-from jev_bench.compare import Rater, human_rater, reference_rater, run_rater
+from jev_bench.analysis.source import AnalysisSource
+from jev_bench.compare import (
+    Rater,
+    compare,
+    email_rows,
+    human_rater,
+    reference_rater,
+    run_rater,
+)
 from jev_bench.emails import Email
-from jev_bench.questions import QuestionSet
+from jev_bench.questions import QuestionSet, with_threshold
 from jev_bench.services import Services
 from jev_bench.store.labels import Labels
 from jev_bench.store.runs import RunMeta
@@ -32,6 +41,7 @@ __all__ = [
     "ComparisonInputs",
     "generation_snapshots",
     "generations_of",
+    "load_analysis_source",
     "load_comparison",
     "load_email",
     "load_emails",
@@ -64,6 +74,23 @@ def load_comparison(services: Services, run_ids: Sequence[str]) -> ComparisonInp
     reference = reference_rater(emails, base, snapshots)
     labels = services.labels.for_generations(generation_ids)
     return ComparisonInputs(metas, base, emails, run_raters(services, metas), reference, labels)
+
+
+def load_analysis_source(
+    services: Services, run_ids: Sequence[str], threshold: float | None
+) -> AnalysisSource:
+    inputs = load_comparison(services, run_ids)
+    metas = {meta.id: meta for meta in inputs.metas}
+    report = compare(inputs.raters(), inputs.base, runs=metas, threshold=threshold)
+    rows = email_rows(inputs.emails, inputs.runs, inputs.labels, inputs.base, threshold=threshold)
+    generations = [
+        load_or_404(services.generations.get, generation_id, "generation")
+        for generation_id in generations_of(inputs.metas)
+    ]
+    questions = with_threshold(inputs.base, threshold)
+    return AnalysisSource(
+        report, rows, inputs.runs, inputs.metas, inputs.emails, generations, questions
+    )
 
 
 def load_runs(services: Services, run_ids: Sequence[str]) -> list[RunMeta]:

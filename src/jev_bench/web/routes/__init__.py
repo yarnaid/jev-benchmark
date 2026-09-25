@@ -3,6 +3,7 @@
 from fastapi import APIRouter
 
 from jev_bench.web.routes import (
+    analyses,
     catalog,
     compare,
     emails,
@@ -26,4 +27,5 @@ ROUTERS: list[APIRouter] = [
     emails.router,
     labels.router,
     questions.router,
+    analyses.router,
 ]

@@ -65,13 +65,22 @@ def test_tables_never_name_emails_or_generators(multi_questions: QuestionSet) ->
 @pytest.mark.parametrize(
     ("limit", "expected"),
     [
-        pytest.param(12, [f"{GENERATION}.0002", f"{GENERATION}.0001"], id="most-disputed-first"),
+        pytest.param(12, [f"{GENERATION}.0002"], id="only-emails-the-runs-disagree-on"),
         pytest.param(1, [f"{GENERATION}.0002"], id="limited"),
         pytest.param(0, [], id="none"),
     ],
 )
 def test_disputed_ids(multi_questions: QuestionSet, limit: int, expected: list[str]) -> None:
     assert disputed_ids(build_source(multi_questions).rows, limit) == expected
+
+
+def test_disputed_ids_rank_by_disagreement(multi_questions: QuestionSet) -> None:
+    row = build_source(multi_questions).rows[0]
+    values = {"a": 0.1, "b": 0.5, "c": None, "d": 0.0, "e": 0.3, "f": 0.5}
+    rows = [
+        row.model_copy(update={"id": key, "disagreement": value}) for key, value in values.items()
+    ]
+    assert disputed_ids(rows, 4) == ["b", "f", "e", "a"]
 
 
 def test_disputed_emails_are_full_json_by_ref(multi_questions: QuestionSet) -> None:
