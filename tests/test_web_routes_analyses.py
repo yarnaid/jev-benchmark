@@ -1,7 +1,9 @@
 """Tests for jev_bench.web.routes.analyses."""
 
-from typing import Any
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
+import httpx2
 import pytest
 from fastapi.testclient import TestClient
 from tests.factories import AppFactory, FakeOpenRouter, poll, seed_generation, services_of
@@ -9,7 +11,11 @@ from tests.factories import AppFactory, FakeOpenRouter, poll, seed_generation, s
 from jev_bench.analysis.config import PLACEHOLDERS
 from jev_bench.web.deps import NO_KEY_DETAIL
 
+if TYPE_CHECKING:
+    from loguru import Message
+
 _KEY = {"X-OpenRouter-Key": "sk-browser"}
+_SENTINEL = "sk-or-v1-SENTINEL-4242"
 _MISSING = "20260925-100000-missing-0001"
 
 
@@ -127,3 +133,47 @@ def test_create_analysis_with_an_invalid_request_is_400(make_app: AppFactory) ->
 )
 def test_unknown_analysis_is_404(make_app: AppFactory, method: str, path: str) -> None:
     assert make_app(FakeOpenRouter()).request(method, path).status_code == 404
+
+
+class _Analyst:
+    def __init__(self, *, echo_key: bool) -> None:
+        self.upstream = FakeOpenRouter()
+        self.echo_key = echo_key
+        self.analysis_requests: list[httpx2.Request] = []
+
+    def __call__(self, request: httpx2.Request) -> httpx2.Response:
+        if (
+            not request.url.path.endswith("/v1/chat/completions")
+            or b"response_format" in request.content
+        ):
+            return self.upstream(request)
+        self.analysis_requests.append(request)
+        if self.echo_key:
+            key = request.headers["authorization"].removeprefix("Bearer ")
+            return httpx2.Response(401, json={"error": {"message": f"bad key {key}", "code": 401}})
+        return self.upstream(request)
+
+
+@pytest.mark.parametrize(
+    ("echo_key", "status"),
+    [
+        pytest.param(False, "completed", id="success"),
+        pytest.param(True, "failed", id="provider-echoes-the-key"),
+    ],
+)
+def test_browser_key_is_used_but_never_persisted_or_logged(
+    make_app: AppFactory, tmp_path: Path, log_records: list[Message], echo_key: bool, status: str
+) -> None:
+    analyst = _Analyst(echo_key=echo_key)
+    client = make_app(analyst, api_key="sk-server")
+    run_ids = _two_runs(client)
+    headers = {"X-OpenRouter-Key": _SENTINEL}
+    created = client.post("/api/analyses", json={"runs": run_ids}, headers=headers).json()
+    final = poll(client, f"/api/analyses/{created['meta']['id']}", until=_finished)
+    assert final["meta"]["status"] == status
+    assert [r.headers["authorization"] for r in analyst.analysis_requests] == [
+        f"Bearer {_SENTINEL}"
+    ]
+    stored = [path.read_text(encoding="utf-8") for path in (tmp_path / "data").rglob("*.json")]
+    assert all(_SENTINEL not in text for text in stored)
+    assert all(_SENTINEL not in str(message) for message in log_records)
