@@ -102,6 +102,26 @@ async def test_per_email_request_body(make_client: ClientFactory, questions: Que
     assert "stream" not in body
 
 
+@pytest.mark.parametrize(
+    ("params", "expected"),
+    [
+        pytest.param({}, {"temperature": 0.0, "reasoning": {"enabled": False}}, id="both-sent"),
+        pytest.param({"temperature": None}, {"reasoning": {"enabled": False}}, id="no-temperature"),
+        pytest.param({"temperature": None, "reasoning_enabled": None}, {}, id="neither-sent"),
+    ],
+)
+async def test_optional_sampling_params(
+    make_client: ClientFactory,
+    questions: QuestionSet,
+    params: dict[str, Any],
+    expected: dict[str, Any],
+) -> None:
+    recorder = Recorder(_json_response(json.dumps(_ANSWER)))
+    await _classifier(make_client(recorder), questions, **params).classify([EmailFactory()])
+    body = recorder.bodies[0]
+    assert {key: body[key] for key in ("temperature", "reasoning") if key in body} == expected
+
+
 async def test_cached_system_prompt_uses_a_cache_control_part(
     make_client: ClientFactory, questions: QuestionSet
 ) -> None:

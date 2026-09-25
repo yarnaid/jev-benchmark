@@ -138,15 +138,18 @@ class LlmClassifier:
     def _body(self, user: str, response_format: JsonObject, emails: Sequence[Email]) -> JsonObject:
         estimated_input = self.sizing.overhead + sum(self.input_tokens(email) for email in emails)
         max_output = self.budget.output or 1
-        return {
+        body: JsonObject = {
             "model": self._model,
             "messages": [self._system_message(), {"role": "user", "content": user}],
-            "temperature": self._params.temperature,
-            "reasoning": {"enabled": self._params.reasoning_enabled},
             "response_format": response_format,
             "provider": {"require_parameters": True},
             "max_tokens": max(1, min(max_output, self.budget.total - estimated_input)),
         }
+        if self._params.temperature is not None:
+            body["temperature"] = self._params.temperature
+        if self._params.reasoning_enabled is not None:
+            body["reasoning"] = {"enabled": self._params.reasoning_enabled}
+        return body
 
     def _system_message(self) -> JsonObject:
         if not self._cache:

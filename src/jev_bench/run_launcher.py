@@ -6,7 +6,9 @@ Classes:
 Functions:
     launch_run: persist the initial RunMeta and start the job; returns (meta, task). Raises
         RunLaunchError for a blank api_key, before any meta is saved.
-    build_classifier: column + model + mode -> Classifier.
+    build_classifier: column + model + mode -> Classifier. Chat parameters the model's catalog
+        entry does not list (`temperature`, `reasoning`) are not sent, and the run snapshot
+        records them as None; with no catalog entry everything configured is sent.
 """
 
 import asyncio
@@ -75,8 +77,9 @@ async def launch_run(
     info = await _model_info(services.catalog, column, model)
     questions = _load_config(services.question_set)
     classifier = build_classifier(column, model, mode, info, questions, config, services, api_key)
+    params = _params(column, config, model, info)
     meta = _new_meta(
-        column, model, mode, request.generation_ids, questions, config, classifier, len(emails), now
+        column, model, mode, request.generation_ids, questions, params, classifier, len(emails), now
     )
     services.runs.save(meta)
     task = services.jobs.start(
@@ -171,19 +174,40 @@ def build_classifier(
         model=model,
         model_info=model_info,
         questions=questions,
-        params=config.llm,
+        params=_fit_chat_params(config.llm, model_info),
         tokens=config.tokens,
         mode=chat_mode,
         cache_system_prompt=column.cache_system_prompt,
     )
 
 
+_OPTIONAL_CHAT_PARAMETERS = {"temperature": "temperature", "reasoning_enabled": "reasoning"}
+
+
 def _params(
-    column: ColumnConfig, config: BenchmarkConfig
+    column: ColumnConfig, config: BenchmarkConfig, model: str, model_info: ModelInfo | None
 ) -> JevParams | LlmParams | EmbeddingParams:
     if column.kind == "decisions":
         return config.jev
-    return config.embeddings if column.kind == "embeddings" else config.llm
+    if column.kind == "embeddings":
+        return config.embeddings
+    fitted = _fit_chat_params(config.llm, model_info)
+    unsent = [name for name in _OPTIONAL_CHAT_PARAMETERS if getattr(fitted, name) is None]
+    if fitted != config.llm:
+        logger.bind(model=model).info(
+            "{} does not accept {}; not sending it", model, ", ".join(unsent)
+        )
+    return fitted
+
+
+def _fit_chat_params(params: LlmParams, model_info: ModelInfo | None) -> LlmParams:
+    supported = set(model_info.supported_parameters) if model_info else set()
+    if not supported:
+        return params
+    unsupported = {
+        field: None for field, name in _OPTIONAL_CHAT_PARAMETERS.items() if name not in supported
+    }
+    return params.model_copy(update=unsupported)
 
 
 def _new_meta(
@@ -192,7 +216,7 @@ def _new_meta(
     mode: RunMode,
     generation_ids: Sequence[str],
     questions: QuestionSet,
-    config: BenchmarkConfig,
+    params: JevParams | LlmParams | EmbeddingParams,
     classifier: Classifier,
     n_emails: int,
     now: datetime | None,
@@ -208,7 +232,7 @@ def _new_meta(
         mode=mode,
         emails_per_request=classifier.emails_per_request,
         question_set=questions,
-        params=_params(column, config),
+        params=params,
         concurrency=classifier.concurrency,
         created_at=created,
         n_emails=n_emails,

@@ -1,5 +1,6 @@
 """Tests for jev_bench.run_launcher."""
 
+import json
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -9,6 +10,7 @@ import pytest
 from pydantic import ValidationError
 from tests.factories import FakeOpenRouter, ServicesFactory, seed_generation
 
+from jev_bench.benchmark_config import LlmParams
 from jev_bench.run_launcher import RunLaunchError, RunRequest, launch_run
 
 _NOW = datetime(2026, 9, 24, 15, 30, 12, tzinfo=UTC)
@@ -154,3 +156,45 @@ async def test_generation_without_emails_is_rejected(make_services: ServicesFact
 def test_run_request_validation(payload: dict[str, Any]) -> None:
     with pytest.raises(ValidationError):
         RunRequest.model_validate(payload)
+
+
+@pytest.mark.parametrize(
+    ("fake", "temperature", "reasoning"),
+    [
+        pytest.param(FakeOpenRouter(), None, False, id="temperature-unsupported-is-not-sent"),
+        pytest.param(
+            FakeOpenRouter(chat_parameters=("reasoning", "structured_outputs", "temperature")),
+            0.0,
+            False,
+            id="supported-temperature-is-sent",
+        ),
+        pytest.param(
+            FakeOpenRouter(chat_parameters=("structured_outputs",)),
+            None,
+            None,
+            id="reasoning-unsupported-is-not-sent",
+        ),
+        pytest.param(FakeOpenRouter(models_status=503), 0.0, False, id="catalog-down-sends-all"),
+    ],
+)
+async def test_chat_params_follow_the_models_supported_parameters(
+    make_services: ServicesFactory,
+    fake: FakeOpenRouter,
+    temperature: float | None,
+    reasoning: bool | None,
+) -> None:
+    services = make_services(fake)
+    generation_id = seed_generation(services)
+    request = RunRequest.model_validate({"column": "anthropic", "generation_ids": [generation_id]})
+    meta, task = await launch_run(request, "sk-test", services, now=_NOW)
+    await task
+    assert isinstance(meta.params, LlmParams)
+    assert (meta.params.temperature, meta.params.reasoning_enabled) == (temperature, reasoning)
+    bodies = [
+        json.loads(sent.content) for sent in fake.requests if sent.url.path.endswith("/completions")
+    ]
+    assert bodies
+    assert all(body.get("temperature") == temperature for body in bodies)
+    expected = None if reasoning is None else {"enabled": reasoning}
+    assert all(body.get("reasoning") == expected for body in bodies)
+    assert services.runs.get(meta.id).status == "completed"

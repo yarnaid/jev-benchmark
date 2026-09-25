@@ -6,7 +6,9 @@ Constants:
     EMAIL_PLACEHOLDERS, OPTION_PLACEHOLDERS: placeholders allowed in embedding templates.
 Classes:
     ColumnConfig: one UI column (kind, catalog filter, default model).
-    JevParams, LlmParams, EmbeddingParams: per-kind request parameters (snapshotted into runs).
+    JevParams, LlmParams, EmbeddingParams: per-kind request parameters (snapshotted into runs;
+        an LlmParams `temperature` / `reasoning_enabled` of None means "not sent" because the
+        model does not support it).
     TokenParams: token-estimate and fallback-limit settings.
     BenchmarkConfig: the whole file.
 Functions:
@@ -67,8 +69,8 @@ class LlmParams(_Frozen):
     kind: Literal["chat"] = "chat"
     system_prompt: str
     system_prompt_all_in_one: str
-    temperature: float = Field(default=0.0, ge=0)
-    reasoning_enabled: bool = False
+    temperature: float | None = Field(default=0.0, ge=0)
+    reasoning_enabled: bool | None = False
     concurrency: int = Field(default=8, ge=1)
     all_in_one_timeout_s: float = Field(default=1800.0, gt=0)
     est_output_tokens_per_email: int = Field(default=400, ge=1)

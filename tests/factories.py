@@ -16,6 +16,8 @@ Functions:
     poll: GET a path repeatedly until a predicate on its JSON body holds, or fail.
 Constants:
     MINI_QUESTIONS_TOML, MINI_BENCHMARK_TOML, MINI_GENERATION_TOML: mini config file contents.
+    CHAT_PARAMETERS: the fake catalog's supported_parameters for chat models (like the real
+        Claude Sonnet 5 / GPT-5.6 Terra entries: no `temperature`).
 Types:
     ClientFactory: type of the make_client fixture.
     ServicesFactory: type of the make_services fixture.
@@ -253,6 +255,7 @@ JEV_ANSWERS: dict[str, Any] = {
     },
     "needs_reply": {"type": "noul", "noul": 0.15},
 }
+CHAT_PARAMETERS = ("max_tokens", "reasoning", "response_format", "structured_outputs")
 _CATALOG: dict[str, list[dict[str, Any]]] = {
     "text": [
         {
@@ -261,7 +264,6 @@ _CATALOG: dict[str, list[dict[str, Any]]] = {
             "pricing": {"prompt": "0.000002", "completion": "0.00001"},
             "context_length": 1000000,
             "top_provider": {"max_completion_tokens": 128000},
-            "supported_parameters": ["structured_outputs"],
         },
         {
             "id": "openai/gpt-5.6-terra",
@@ -269,7 +271,6 @@ _CATALOG: dict[str, list[dict[str, Any]]] = {
             "pricing": {"prompt": "0.000002", "completion": "0.000012"},
             "context_length": 1050000,
             "top_provider": {"max_completion_tokens": 128000},
-            "supported_parameters": ["structured_outputs"],
         },
     ],
     "decisions": [
@@ -296,8 +297,11 @@ def _vector(text: str) -> list[float]:
 
 
 class FakeOpenRouter:
-    def __init__(self, *, models_status: int = 200) -> None:
+    def __init__(
+        self, *, models_status: int = 200, chat_parameters: tuple[str, ...] = CHAT_PARAMETERS
+    ) -> None:
         self.models_status = models_status
+        self.chat_parameters = chat_parameters
         self.requests: list[httpx2.Request] = []
 
     def __call__(self, request: httpx2.Request) -> httpx2.Response:
@@ -333,7 +337,10 @@ class FakeOpenRouter:
         if self.models_status != 200:
             return httpx2.Response(self.models_status, json={"error": {"message": "catalog down"}})
         modality = request.url.params.get("output_modalities") or "text"
-        return httpx2.Response(200, json={"data": _CATALOG[modality]})
+        models = _CATALOG[modality]
+        if modality == "text":
+            models = [{**model, "supported_parameters": self.chat_parameters} for model in models]
+        return httpx2.Response(200, json={"data": models})
 
     def _chat(self, body: dict[str, Any]) -> httpx2.Response:
         if body["response_format"]["json_schema"]["name"] == "email_generation":
