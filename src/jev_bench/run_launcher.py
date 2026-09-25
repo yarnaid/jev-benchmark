@@ -3,7 +3,9 @@
 Classes:
     RunRequest: what the UI / CLI asks for.
     RunLaunchError: invalid request (unknown column/generation/model, empty email set, bad mode).
+    ResolvedRun: a validated request's column, model, mode, emails, catalog entry and configs.
 Functions:
+    resolve_run: validate a request against the config, stores and catalog (no API key needed).
     launch_run: persist the initial RunMeta and start the job; returns (meta, task). Raises
         RunLaunchError for a blank api_key, before any meta is saved.
     build_classifier: column + model + mode -> Classifier. Chat parameters the model's catalog
@@ -15,7 +17,7 @@ import asyncio
 import tomllib
 from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, NamedTuple
 
 from loguru import logger
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
@@ -41,10 +43,12 @@ from jev_bench.runner import execute_run
 from jev_bench.store.runs import RunMeta, RunMode
 
 __all__ = [
+    "ResolvedRun",
     "RunLaunchError",
     "RunRequest",
     "build_classifier",
     "launch_run",
+    "resolve_run",
 ]
 
 if TYPE_CHECKING:
@@ -64,11 +68,17 @@ class RunLaunchError(ValueError):
     pass
 
 
-async def launch_run(
-    request: RunRequest, api_key: str, services: Services, *, now: datetime | None = None
-) -> tuple[RunMeta, asyncio.Task[None]]:
-    if not api_key.strip():
-        raise RunLaunchError("an OpenRouter API key is required")
+class ResolvedRun(NamedTuple):
+    column: ColumnConfig
+    model: str
+    mode: RunMode
+    emails: list[Email]
+    info: ModelInfo | None
+    questions: QuestionSet
+    config: BenchmarkConfig
+
+
+async def resolve_run(request: RunRequest, services: Services) -> ResolvedRun:
     config = _load_config(services.benchmark_config)
     column = _column(config, request.column)
     mode = _mode(column, request.mode)
@@ -76,6 +86,15 @@ async def launch_run(
     emails = _emails(services, request.generation_ids)
     info = await _model_info(services.catalog, column, model)
     questions = _load_config(services.question_set)
+    return ResolvedRun(column, model, mode, emails, info, questions, config)
+
+
+async def launch_run(
+    request: RunRequest, api_key: str, services: Services, *, now: datetime | None = None
+) -> tuple[RunMeta, asyncio.Task[None]]:
+    if not api_key.strip():
+        raise RunLaunchError("an OpenRouter API key is required")
+    column, model, mode, emails, info, questions, config = await resolve_run(request, services)
     classifier = build_classifier(column, model, mode, info, questions, config, services, api_key)
     params = _params(column, config, model, info)
     meta = _new_meta(

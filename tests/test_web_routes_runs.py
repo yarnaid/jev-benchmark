@@ -160,3 +160,25 @@ def test_cancel_running_run(make_app: AppFactory) -> None:
     result = client.post(f"/api/runs/{run_id}/cancel").json()
     final = poll(client, f"/api/runs/{run_id}", until=_done)
     assert final["meta"]["status"] in ({"cancelled"} if result["cancelled"] else {"completed"})
+
+
+@pytest.mark.parametrize(
+    ("body", "status"),
+    [
+        pytest.param({"column": "jev"}, 200, id="jev"),
+        pytest.param({"column": "anthropic", "mode": "all_in_one"}, 200, id="chat-all-in-one"),
+        pytest.param({"column": "nope"}, 400, id="unknown-column"),
+        pytest.param({"column": "jev", "mode": "all_in_one"}, 400, id="mode-for-non-chat"),
+    ],
+)
+def test_estimate_run_needs_no_key(make_app: AppFactory, body: dict[str, str], status: int) -> None:
+    client = make_app(FakeOpenRouter())
+    generation_id = seed_generation(services_of(client), emails=2)
+    response = client.post("/api/runs/estimate", json={**body, "generation_ids": [generation_id]})
+    assert response.status_code == status
+    if status == 200:
+        estimate = response.json()
+        assert estimate["n_emails"] == 2
+        assert estimate["token_cost"] > 0
+        assert estimate["history_cost"] is None
+    assert services_of(client).runs.list_metas() == []

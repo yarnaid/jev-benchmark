@@ -4,6 +4,8 @@ Constants:
     OVERSIZE_ERROR
 Functions:
     execute_run: job body for one run (always finalizes the meta; re-raises only CancelledError).
+    plan_run: the token-budgeted request plan for a classifier's pending emails (also used by the
+        cost estimate, so estimates and runs share one plan).
     summarize: RunMeta totals recomputed from persisted predictions.
     mark_interrupted_runs: startup sweep turning orphaned `running` runs into `interrupted`.
 """
@@ -35,6 +37,7 @@ __all__ = [
     "OVERSIZE_ERROR",
     "execute_run",
     "mark_interrupted_runs",
+    "plan_run",
     "summarize",
 ]
 
@@ -73,7 +76,7 @@ async def _execute(
     progress.cost += prepared.usage.cost
     _record_outcomes(store, meta.id, prepared.resolved, progress)
     pending = list(prepared.pending)
-    plan = _plan(classifier, pending)
+    plan = plan_run(classifier, pending)
     oversize = {pending[index].id: EmailOutcome(error=OVERSIZE_ERROR) for index in plan.oversize}
     _record_outcomes(store, meta.id, oversize, progress)
     store.save(_planned(meta, prepared, len(pending), plan))
@@ -86,7 +89,7 @@ async def _execute(
     )
 
 
-def _plan(classifier: Classifier, pending: Sequence[Email]) -> RequestPlan:
+def plan_run(classifier: Classifier, pending: Sequence[Email]) -> RequestPlan:
     chunks = chunk_by_count(len(pending), classifier.emails_per_request)
     sizes = [classifier.input_tokens(email) for email in pending]
     return plan_requests(chunks, sizes, classifier.budget, classifier.sizing)

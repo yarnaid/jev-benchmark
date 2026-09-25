@@ -6,12 +6,14 @@ Classes:
     RunView: meta + live progress.
 Functions:
     list_runs, create_run, get_run, cancel_run: route handlers.
+    estimate_run_cost: POST /runs/estimate, the preliminary cost of a run (no key needed).
 """
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from jev_bench.jobs import ProgressView
+from jev_bench.run_estimate import RunEstimate, estimate_run
 from jev_bench.run_launcher import RunLaunchError, RunRequest, launch_run
 from jev_bench.services import Services
 from jev_bench.store.runs import RunMeta
@@ -23,6 +25,7 @@ __all__ = [
     "RunView",
     "cancel_run",
     "create_run",
+    "estimate_run_cost",
     "get_run",
     "list_runs",
     "router",
@@ -57,6 +60,14 @@ async def create_run(request: RunRequest, services: ServicesDep, api_key: ApiKey
     except RunLaunchError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return _view(services, meta)
+
+
+@router.post("/runs/estimate")
+async def estimate_run_cost(request: RunRequest, services: ServicesDep) -> RunEstimate:
+    try:
+        return await estimate_run(request, services)
+    except RunLaunchError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get("/runs/{run_id}", response_model_exclude=LIGHT)
