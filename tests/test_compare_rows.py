@@ -6,7 +6,7 @@ from tests.factories import EmailFactory
 
 from jev_bench.compare.raters import Rater
 from jev_bench.compare.rows import disagreement_index, email_rows
-from jev_bench.questions import ChoiceQuestion, QuestionSet
+from jev_bench.questions import ChoiceQuestion, Distribution, QuestionSet
 
 
 @pytest.fixture
@@ -72,14 +72,44 @@ def test_multi_top_answers_follow_the_relative_threshold(multi_questions: Questi
     assert tops(1.0)["g.0004"] == ["billing"]
 
 
-def test_multi_labels_with_equal_probability_keep_option_order(
+@pytest.mark.parametrize(
+    ("topics", "threshold", "expected"),
+    [
+        pytest.param(
+            {"billing": 0.4, "meeting": 0.2, "travel": 0.4},
+            None,
+            ["billing", "travel"],
+            id="ties-keep-option-order",
+        ),
+        pytest.param(
+            {"billing": 0.25, "meeting": 0.5, "travel": 0.25},
+            0.5,
+            ["meeting", "billing", "travel"],
+            id="highest-first-then-option-order",
+        ),
+        pytest.param(
+            {"billing": 0.25, "meeting": 0.125, "travel": 0.625},
+            0.4,
+            ["travel", "billing"],
+            id="probability-order-differs-from-option-order",
+        ),
+    ],
+)
+def test_multi_labels_are_listed_highest_probability_first(
     multi_questions: QuestionSet,
+    topics: Distribution,
+    threshold: float | None,
+    expected: list[str],
 ) -> None:
-    tie = {"g.0001": {"topics": {"billing": 0.4, "meeting": 0.2, "travel": 0.4}}}
+    answers = {"g.0001": {"topics": topics}}
     rows = email_rows(
-        [EmailFactory(id="g.0001")], [rater("a", "run", tie, multi_questions)], {}, multi_questions
+        [EmailFactory(id="g.0001")],
+        [rater("a", "run", answers, multi_questions)],
+        {},
+        multi_questions,
+        threshold=threshold,
     )
-    assert rows[0].top["a"]["topics"] == ["billing", "travel"]
+    assert rows[0].top["a"]["topics"] == expected
 
 
 def test_score_questions_get_0_to_100_scores(questions: QuestionSet, run_a: Rater) -> None:
