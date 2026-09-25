@@ -2,7 +2,16 @@
 
 from fastapi import APIRouter
 
-from jev_bench.web.routes import catalog, compare, emails, generations, labels, runs, status
+from jev_bench.web.routes import (
+    catalog,
+    compare,
+    emails,
+    generations,
+    labels,
+    questions,
+    runs,
+    status,
+)
 
 __all__ = [
     "ROUTERS",
@@ -16,4 +25,5 @@ ROUTERS: list[APIRouter] = [
     compare.router,
     emails.router,
     labels.router,
+    questions.router,
 ]

@@ -34,6 +34,8 @@ const segment = (value) => encodeURIComponent(value);
 
 export const api = {
   status: () => request("GET", "/status"),
+  questions: () => request("GET", "/questions"),
+  estimateRun: (body) => request("POST", "/runs/estimate", { body }),
   catalog: () => request("GET", "/catalog"),
   generations: () => request("GET", "/generations"),
   generation: (id) => request("GET", `/generations/${segment(id)}`),

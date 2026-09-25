@@ -1,11 +1,12 @@
 /**
- * Shared page chrome: navbar (pages, API-key badge, theme toggle), API-key dialog, toasts and a job starter
- * that opens the key dialog when the server asks for a key.
- * Exports: initLayout, openKeyModal, toastError, toastSuccess, startJob.
+ * Shared page chrome: navbar (pages, API-key badge, theme toggle), API-key dialog (with how to get a
+ * key), toasts, the delegated Bootstrap tooltips behind every (?) icon, and a job starter that opens the
+ * key dialog when the server asks for a key.
+ * Exports: initLayout, keySteps, openKeyModal, toastError, toastSuccess, startJob.
  */
 import { api, needsKey } from "./api.js";
 import { clear, h, icon } from "./dom.js";
-import { forgetKey, getKey, KEY_EVENT, setKey } from "./key.js";
+import { forgetKey, getKey, KEY_EVENT, KEY_STEPS, setKey } from "./key.js";
 import { readPref, writePref } from "./storage.js";
 
 const PAGES = [
@@ -13,6 +14,7 @@ const PAGES = [
   ["/generations.html", "Generations", "envelope-paper"],
   ["/explorer.html", "Explorer", "search"],
   ["/runs.html", "Runs", "clock-history"],
+  ["/help.html", "Help", "question-circle"],
 ];
 
 export async function initLayout() {
@@ -20,6 +22,7 @@ export async function initLayout() {
   const toasts = h("div", { class: "toast-container position-fixed bottom-0 end-0 p-3", id: "toasts" });
   document.body.prepend(navbar(), keyModal(), toasts);
   window.addEventListener(KEY_EVENT, () => refreshKeyBadge());
+  new bootstrap.Tooltip(document.body, { selector: '[data-bs-toggle="tooltip"]', trigger: "hover focus" });
   await refreshKeyBadge();
 }
 
@@ -95,15 +98,13 @@ function keyModal() {
   return modal;
 }
 
-const KEY_LINKS = [
-  ["Create a key", "https://openrouter.ai/keys", "Sign in to OpenRouter, open Keys and create a key (it starts with sk-or-v1-)."],
-  ["Add credits", "https://openrouter.ai/settings/credits", "Runs are paid per use from your OpenRouter credits."],
-  ["Optional: your provider keys", "https://openrouter.ai/workspaces/default/byok", "Bring your own Anthropic or OpenAI key (BYOK) to be billed by the provider directly."],
-];
+export function keySteps() {
+  const steps = KEY_STEPS.map(([label, href, text]) => h("li", { class: "mb-1" }, h("a", { href, target: "_blank", rel: "noopener noreferrer" }, label, " ", icon("box-arrow-up-right")), h("span", { class: "d-block text-body-secondary" }, text)));
+  return h("ol", { class: "mt-2 mb-0 ps-3" }, steps);
+}
 
 function keyHowTo() {
-  const steps = KEY_LINKS.map(([label, href, text]) => h("li", { class: "mb-1" }, h("a", { href, target: "_blank", rel: "noopener noreferrer" }, label, " ", icon("box-arrow-up-right")), h("span", { class: "d-block text-body-secondary" }, text)));
-  return h("details", { class: "mt-3 small" }, h("summary", { class: "fw-semibold" }, icon("question-circle"), " How to get an OpenRouter key"), h("ol", { class: "mt-2 mb-0 ps-3" }, steps));
+  return h("details", { class: "mt-3 small" }, h("summary", { class: "fw-semibold" }, icon("question-circle"), " How to get an OpenRouter key"), keySteps());
 }
 
 export function openKeyModal() {

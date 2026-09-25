@@ -98,6 +98,26 @@ code,
   width: 8rem;
 }
 
+.help-tip {
+  color: var(--bs-secondary-color);
+  cursor: help;
+  font-size: 0.8em;
+  font-weight: 400;
+}
+
+.help-tip:hover,
+.help-tip:focus-visible {
+  color: var(--bs-primary);
+}
+
+.help-page {
+  max-width: 980px;
+}
+
+.help-section {
+  scroll-margin-top: 1rem;
+}
+
 .clickable {
   cursor: pointer;
 }

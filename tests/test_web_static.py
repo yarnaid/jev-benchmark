@@ -24,6 +24,8 @@ PAGE_MODULES = (
     "answers.js",
     "selection.js",
     "email-detail.js",
+    "glossary.js",
+    "help.js",
 )
 
 
