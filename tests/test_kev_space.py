@@ -7,7 +7,7 @@ from typing import Any
 
 import httpx2
 import pytest
-from tests.factories import KEV_RESPONSE, space_events, space_info
+from tests.factories import KEV_RESPONSE, SPACE_ASLEEP_PAGE, space_events, space_info
 
 from jev_bench.kev_space import (
     KevSpaceClient,
@@ -133,6 +133,8 @@ async def test_decide_request_shape(
     ]
 
 
+_HTML = {"content-type": "text/html; charset=utf-8"}
+_ASLEEP = r"HTML page \(asleep, restarting or down\); open https://kev.test to wake it"
 _QUOTA = "You have exceeded your GPU quota (15s requested vs. 3s left). Try again in 0:10:00"
 
 
@@ -234,10 +236,18 @@ _QUOTA = "You have exceeded your GPU quota (15s requested vs. 3s left). Try agai
         pytest.param(
             [_reply(200, text="<html>")] * 2,
             2,
-            "invalid JSON",
+            "not JSON",
             True,
             False,
             id="call-body-not-json",
+        ),
+        pytest.param(
+            [_reply(503, text=SPACE_ASLEEP_PAGE, headers=_HTML)] * 2,
+            2,
+            _ASLEEP,
+            True,
+            False,
+            id="call-on-a-sleeping-space",
         ),
     ],
 )
@@ -254,6 +264,7 @@ async def test_decide_errors(
         await _decide(make_space(script), token=_TOKEN)
     assert (info.value.retryable, info.value.fatal) == (retryable, fatal)
     assert _TOKEN not in str(info.value)
+    assert "<" not in str(info.value)
     assert len(script.requests) == calls
 
 
@@ -287,7 +298,14 @@ async def test_info_reads_the_api_schema(make_space: SpaceFactory) -> None:
         pytest.param(
             [_reply(503, text="<html>sleeping</html>")] * 2, 2, "HTTP 503", id="space-asleep"
         ),
-        pytest.param([_reply(200, text="<html>")] * 2, 2, "invalid JSON", id="html-body"),
+        pytest.param([_reply(200, text="<html>")] * 2, 2, "not JSON", id="html-body"),
+        pytest.param(
+            [_reply(503, text=SPACE_ASLEEP_PAGE, headers=_HTML)] * 2,
+            2,
+            _ASLEEP,
+            id="realistic-sleeping-space-page",
+        ),
+        pytest.param([_reply(200, text="oops")] * 2, 2, "not JSON: 'oops'", id="plain-text-body"),
         pytest.param([_reply(200, json=[1])], 1, "not an object", id="non-object-body"),
         pytest.param([_connect_error] * 2, 2, "transport error", id="transport-error"),
     ],
@@ -296,8 +314,9 @@ async def test_info_errors(
     make_space: SpaceFactory, steps: list[Step], calls: int, message: str
 ) -> None:
     script = Script(*steps)
-    with pytest.raises(KevSpaceError, match=message):
+    with pytest.raises(KevSpaceError, match=message) as info:
         await make_space(script).info(_URL, token=None)
+    assert "<" not in str(info.value)
     assert len(script.requests) == calls
 
 

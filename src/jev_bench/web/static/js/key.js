@@ -2,7 +2,9 @@
  * Browser-side OpenRouter key and optional Hugging Face token (for Kev) kept in localStorage, with a
  * change event for the navbar badge and the Kev card, and the steps to get each (shown in the key dialog
  * and on the Help page).
- * Exports: KEY_EVENT, KEY_STEPS, HF_STEPS, getKey, setKey, forgetKey, getHfToken, setHfToken, forgetHfToken.
+ * isHfToken guards against pasting another secret (the OpenRouter key) into the Hugging Face field.
+ * Exports: KEY_EVENT, KEY_STEPS, HF_STEPS, getKey, setKey, forgetKey, getHfToken, setHfToken, forgetHfToken,
+ * isHfToken.
  */
 import { readPref, removePref, writePref } from "./storage.js";
 
@@ -30,6 +32,8 @@ export function forgetKey() {
   removePref(KEY_PREF);
   window.dispatchEvent(new Event(KEY_EVENT));
 }
+
+export const isHfToken = (value) => /^hf_[A-Za-z0-9]+$/.test(value);
 
 export const getHfToken = () => readPref(HF_PREF);
 

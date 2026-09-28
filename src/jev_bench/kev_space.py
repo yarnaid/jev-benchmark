@@ -5,6 +5,8 @@ A decision is two calls. `POST {space}/gradio_api/call/{api_name}` with the endp
 (`data[1]` is the `/v1/systemone` response) or `error` (`data` is `{"error": message, ...}`);
 `heartbeat` events are ignored. An HF token, when given, is sent as a bearer token on every call.
 A whole attempt is bounded by `timeout_s`; a timeout fails the email and is not retried.
+An HTML error page (a sleeping or restarting Space) is reported as a hint to wake the Space,
+never as markup.
 
 Constants:
     INFO_PATH, CALL_PATH
@@ -220,7 +222,7 @@ def _check_status(response: httpx2.Response, step: str) -> None:
     if response.status_code < 400:
         return
     raise KevSpaceError(
-        f"Kev Space {step}: HTTP {response.status_code}: {response.text[:300]}",
+        f"Kev Space {step}: HTTP {response.status_code}: {_error_text(response)}",
         status=response.status_code,
         retryable=response.status_code in RETRY_STATUSES,
     )
@@ -230,11 +232,24 @@ def _body(response: httpx2.Response) -> JsonObject:
     try:
         payload = response.json()
     except ValueError as exc:
-        text = response.text[:200]
-        raise KevSpaceError(f"Kev Space: invalid JSON {text!r}", retryable=True) from exc
+        text = _error_text(response)
+        raise KevSpaceError(
+            f"Kev Space: the response is not JSON: {text!r}", retryable=True
+        ) from exc
     if not isinstance(payload, dict):
         raise KevSpaceError("Kev Space: the JSON body is not an object")
     return payload
+
+
+def _error_text(response: httpx2.Response) -> str:
+    text = response.text.strip()
+    if not text.startswith("<"):
+        return text[:300]
+    url = response.request.url
+    return (
+        "the Space answered with an HTML page (asleep, restarting or down); "
+        f"open {url.scheme}://{url.host} to wake it, then retry"
+    )
 
 
 def _auth(token: str | None) -> dict[str, str]:

@@ -8,7 +8,7 @@ Classes:
         `response_format` is an analysis: it streams `analysis_parts` with `analysis_finish`.
         /gradio_api/ paths go to its FakeKevSpace (`kev`).
     FakeKevSpace: MockTransport handler for Kev's Space (/gradio_api/info, call, result stream);
-        a refused call echoes the Authorization header.
+        a refused call echoes the Authorization header; a failing info serves SPACE_ASLEEP_PAGE.
 Functions:
     chat_body: OpenRouter chat completion response.
     sse_body: OpenRouter streaming chat completion response.
@@ -29,6 +29,7 @@ Constants:
         Claude Sonnet 5 / GPT-5.6 Terra entries: no `temperature`).
     ANALYSIS_PARTS: the fake analyst's streamed Markdown.
     KEV_RESPONSE: a Kev /v1/systemone response (Jev's answers, no cost).
+    SPACE_ASLEEP_PAGE: the kind of HTML page Hugging Face serves for a sleeping Space.
 Types:
     ClientFactory: type of the make_client fixture.
     ServicesFactory: type of the make_services fixture.
@@ -316,6 +317,11 @@ JEV_ANSWERS: dict[str, Any] = {
         "probabilities": {"billing": 0.7, "meeting": 0.2, "travel": 0.1},
     },
 }
+SPACE_ASLEEP_PAGE = (
+    '<!DOCTYPE html>\n<html class="">\n<head>\n    <meta charset="utf-8" />\n'
+    "    <title>Kev - a Hugging Face Space by jaredpalmer</title>\n</head>\n"
+    "<body><h1>This Space is sleeping due to inactivity</h1></body>\n</html>\n"
+)
 KEV_RESPONSE: dict[str, Any] = {
     "model": "jaredpalmer/kev-4b",
     "answers": JEV_ANSWERS,
@@ -391,8 +397,10 @@ class FakeKevSpace:
         models: Sequence[str] = ("Kev-4B", "Kev-0.8B"),
         events: Sequence[tuple[str, object]] = _KEV_EVENTS,
         call_status: int = 200,
+        info_status: int = 200,
     ) -> None:
         self.models = models
+        self.info_status = info_status
         self.events = events
         self.call_status = call_status
         self.requests: list[httpx2.Request] = []
@@ -400,11 +408,17 @@ class FakeKevSpace:
     def __call__(self, request: httpx2.Request) -> httpx2.Response:
         self.requests.append(request)
         if request.url.path.endswith("/gradio_api/info"):
-            return httpx2.Response(200, json=space_info(self.models))
+            return self._info()
         if request.method == "POST":
             return self._call(request)
         stream = space_events(*self.events)
         return httpx2.Response(200, content=stream, headers={"content-type": "text/event-stream"})
+
+    def _info(self) -> httpx2.Response:
+        if self.info_status != 200:
+            headers = {"content-type": "text/html; charset=utf-8"}
+            return httpx2.Response(self.info_status, text=SPACE_ASLEEP_PAGE, headers=headers)
+        return httpx2.Response(200, json=space_info(self.models))
 
     def _call(self, request: httpx2.Request) -> httpx2.Response:
         if self.call_status != 200:

@@ -7,7 +7,7 @@
  */
 import { api, needsKey } from "./api.js";
 import { clear, h, icon } from "./dom.js";
-import { forgetHfToken, forgetKey, getKey, HF_STEPS, KEY_EVENT, KEY_STEPS, setHfToken, setKey } from "./key.js";
+import { forgetHfToken, forgetKey, getKey, HF_STEPS, isHfToken, KEY_EVENT, KEY_STEPS, setHfToken, setKey } from "./key.js";
 import { readPref, writePref } from "./storage.js";
 
 export const THEME_EVENT = "jev-bench:theme-changed";
@@ -74,6 +74,10 @@ function keyModal() {
   const save = () => {
     const [key, token] = [input.value.trim(), hfInput.value.trim()];
     if (!key && !token) return;
+    if (token && !isHfToken(token)) {
+      toastError("That is not a Hugging Face token (it starts with hf_). Nothing was saved.");
+      return;
+    }
     if (key) setKey(key);
     if (token) setHfToken(token);
     input.value = "";
