@@ -69,7 +69,9 @@ node --test tests/js/                           # JS unit tests (Node's runner, 
     sent, because `provider.require_parameters` would otherwise 404; the run snapshot records them as
     `null`.
   - Kev is a second `decisions` column (`prefix = "jaredpalmer/"`, 8,192-token context) that shares a card
-    slot with Embeddings; the Jev column's `prefix = "typesafe/"` keeps Kev out of Jev's model picker.
+    slot with Embeddings; the Jev column's `prefix = "typesafe/"` keeps Kev out of Jev's model picker. The
+    "×Jev" baseline in the summary table is the `jev` column's run (`jevBaseline`), never just the first
+    decisions run.
   - `runner.py` plans requests under the token budget (`tokens.py` + `request_plan.py`: minimal equal
     contiguous split), runs them under a semaphore, and appends predictions and responses.
 - **Generation** (`generation/`): a seeded trait plan (`plan.py`), then prompts and strict schema

@@ -3,7 +3,9 @@
  * The summary shows each rater's color, its κ against the reference and human labels when scored
  * (quality.js), emails, errors, time and cost (both also relative to the Jev run in the comparison:
  * ×1 = Jev), cost per email, cold cost, requests and latency. Every column header has a (?) tooltip.
- * Exports: raterLabel, reportHeader, summaryTable, swatch, table.
+ * The baseline is the run of the `jev` column (jevBaseline), not merely the first decisions run: Kev is a
+ * decisions column too.
+ * Exports: jevBaseline, raterLabel, reportHeader, summaryTable, swatch, table.
  */
 import { h, icon } from "./dom.js";
 import { duration, fixed, money, num, times } from "./format.js";
@@ -46,8 +48,10 @@ export function table(head, rows, extraClass = "") {
   return h("table", { class: `table table-sm align-middle mb-2 ${extraClass}` }, h("thead", {}, h("tr", {}, cells)), h("tbody", {}, rows));
 }
 
+export const jevBaseline = (raters) => raters.find((rater) => rater.run?.column === "jev")?.run ?? null;
+
 export function summaryTable(raters, labels, colors, quality = []) {
-  const jev = raters.find((rater) => rater.run?.kind === "decisions")?.run ?? null;
+  const jev = jevBaseline(raters);
   const targets = qualityTargets(quality);
   const head = [HEAD[0], ...targets.map(targetHeading), ...HEAD.slice(1)];
   const rows = raters.map((rater) => summaryRow(rater, labels[rater.id], colors.get(rater.id), [...targets.map((target) => qualityCell(quality, rater.id, target)), ...runCells(rater, jev)]));
