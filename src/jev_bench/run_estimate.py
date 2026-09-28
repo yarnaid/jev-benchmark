@@ -6,6 +6,7 @@ Two figures are returned:
 - a history estimate: the mean cost per email of comparable past runs (same column, model and
   mode; completed; a recorded cost above zero; embeddings use their cold cost), times the
   number of emails.
+Kev columns are free: their token cost is 0 and they have no history figure.
 
 Classes:
     RunEstimate: email, request and token counts, plus both cost figures.

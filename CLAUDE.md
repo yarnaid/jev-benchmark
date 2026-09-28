@@ -6,14 +6,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 A benchmark for **Jev** (`typesafe/jev-1.13`, TypeSafe's decision model on OpenRouter) against an Anthropic
 chat model, an OpenAI chat model and an embedding-similarity baseline on synthetic email triage. Everything
-goes through OpenRouter.
+goes through OpenRouter, except the optional Kev column, which calls Kev's public Hugging Face Space.
 
 Design: `docs/superpowers/specs/2026-09-24-jev-benchmark-design.md` (§14 records revisions made while
 planning). Implementation plan: `docs/superpowers/plans/2026-09-24-jev-benchmark.md`.
 Question model v2 (multi-label category, 0–100 scores, new questions): spec
 `docs/superpowers/specs/2026-09-25-question-model-v2-design.md`, plan
 `docs/superpowers/plans/2026-09-25-question-model-v2.md`. UI upgrades and the Analyze tab: spec
-`docs/superpowers/specs/2026-09-25-ui-analyze-design.md`.
+`docs/superpowers/specs/2026-09-25-ui-analyze-design.md`. Kev column: spec
+`docs/superpowers/specs/2026-09-28-kev-column-design.md`, plan `docs/superpowers/plans/2026-09-28-kev-column.md`.
 
 **All repository content is in English** (code, docs, UI copy, prompts, commits).
 
@@ -58,13 +59,20 @@ node --test tests/js/                           # JS unit tests (Node's runner, 
   - Score questions also get a 0–100 score (`metrics.distributions.score_0_100`, the only implementation).
   - Jev payloads (`classifiers/jev.py`), LLM JSON schemas (`classifiers/llm_schema.py`), embedding option
     texts, generator schemas, metrics and the UI are all derived from it.
-- **Columns** (`config/benchmark.toml` → `benchmark_config.py`) are `decisions` / `chat` / `embeddings`.
+- **Columns** (`config/benchmark.toml` → `benchmark_config.py`) are `decisions` / `chat` / `embeddings` /
+  `kev`.
   - Each kind has a classifier implementing the `Classifier` protocol (`classifiers/base.py`): `prepare()`
     once, then `classify(batch)` per request.
   - `run_launcher.py` validates a request and builds the classifier. Chat parameters missing from the
     model's catalog `supported_parameters` (`temperature` on Claude Sonnet 5 and GPT-5.6 Terra) are not
     sent, because `provider.require_parameters` would otherwise 404; the run snapshot records them as
     `null`.
+  - `kev` columns list static `models` (no OpenRouter catalog) and call Kev's Space through `kev_space.py`
+    (Gradio REST: POST `/gradio_api/call/decide`, then an SSE result):
+    - `classifiers/kev.py` reuses Jev's `questions_payload` / `parse_decisions`;
+    - `prepare()` checks `/gradio_api/info` for the endpoint and model;
+    - an exhausted ZeroGPU quota, HTTP 401/403/404 and a missing endpoint are fatal;
+    - `[kev]` in `benchmark.toml` holds the Space URL, calibration, concurrency and the timeout.
   - `runner.py` plans requests under the token budget (`tokens.py` + `request_plan.py`: minimal equal
     contiguous split), runs them under a semaphore, and appends predictions and responses.
 - **Generation** (`generation/`): a seeded trait plan (`plan.py`), then prompts and strict schema
@@ -139,7 +147,8 @@ node --test tests/js/                           # JS unit tests (Node's runner, 
   - the browser sends the header only on job-starting POSTs (`/api/runs`, `/api/generations`,
     `/api/analyses`);
   - keys are passed per call (never set on the shared client) and are never persisted or logged. A test
-    greps `data/` and the logs for a sentinel key.
+    greps `data/` and the logs for a sentinel key;
+  - the HF token follows the same rules; its header is sent only on `POST /api/runs`.
 - **UI:**
   - never use `innerHTML` / `outerHTML` / `insertAdjacentHTML` / `document.write`: build DOM with `h()`
     from `js/dom.js`. Email bodies are hostile by design (prompt injections);
@@ -153,6 +162,13 @@ node --test tests/js/                           # JS unit tests (Node's runner, 
   blank or missing header falls back to the server key (`Services.api_key`). The header is sent only on
   `POST /api/runs`, `POST /api/generations` and `POST /api/analyses`.
 - Keys are never persisted (run/generation/response files) and never logged.
+- The optional HF token (`HF_TOKEN`, or the browser's `X-HF-Token`, sent only on `POST /api/runs`) follows
+  the same rules:
+  - a browser value overrides the server's;
+  - it is held as `SecretStr` in `KevClassifier` and is never persisted or logged;
+  - `hf_…` fragments are masked in Space errors.
+
+  Kev runs need no OpenRouter key.
 - `classifiers/*` and `GeneratorDeps` hold the key as `SecretStr`, never a plain `str` field.
 - Every entry point (`cli.py`, `web/app.py`) calls `log_setup.configure_logging()` first, which runs with
   `diagnose=False` so a traceback can't leak a key from a local variable.

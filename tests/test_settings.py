@@ -1,5 +1,6 @@
 """Tests for jev_bench.settings."""
 
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -9,6 +10,7 @@ from jev_bench.settings import Settings, load_settings
 
 _ENV_NAMES = (
     "OPENROUTER_API_KEY",
+    "HF_TOKEN",
     "JEV_BENCH_DATA_DIR",
     "JEV_BENCH_CONFIG_DIR",
     "JEV_BENCH_MAX_RETRIES",
@@ -23,20 +25,31 @@ def _clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.mark.parametrize(
+    ("env_name", "read"),
+    [
+        pytest.param("OPENROUTER_API_KEY", Settings.server_api_key, id="openrouter"),
+        pytest.param("HF_TOKEN", Settings.server_hf_token, id="hf"),
+    ],
+)
+@pytest.mark.parametrize(
     ("raw", "expected"),
     [
         pytest.param(None, None, id="unset"),
         pytest.param("", None, id="empty"),
         pytest.param("   ", None, id="blank"),
-        pytest.param("sk-or-v1-abc", "sk-or-v1-abc", id="set"),
+        pytest.param("secret-abc", "secret-abc", id="set"),
     ],
 )
-def test_server_api_key(
-    monkeypatch: pytest.MonkeyPatch, raw: str | None, expected: str | None
+def test_server_secrets(
+    monkeypatch: pytest.MonkeyPatch,
+    env_name: str,
+    read: Callable[[Settings], str | None],
+    raw: str | None,
+    expected: str | None,
 ) -> None:
     if raw is not None:
-        monkeypatch.setenv("OPENROUTER_API_KEY", raw)
-    assert Settings(_env_file=None).server_api_key() == expected
+        monkeypatch.setenv(env_name, raw)
+    assert read(Settings(_env_file=None)) == expected
 
 
 def test_prefixed_env_overrides(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -69,4 +82,7 @@ def test_key_accepted_by_field_name() -> None:
 
 def test_secret_never_in_repr(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-v1-secret")
-    assert "sk-or-v1-secret" not in repr(load_settings())
+    monkeypatch.setenv("HF_TOKEN", "hf_secretsecret")
+    shown = repr(load_settings())
+    assert "sk-or-v1-secret" not in shown
+    assert "hf_secretsecret" not in shown

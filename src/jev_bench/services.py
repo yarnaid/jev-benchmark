@@ -1,8 +1,9 @@
 """Long-lived services shared by the web app and the CLI.
 
 Classes:
-    Services: stores, OpenRouter client, catalog, job registry and config loaders from Settings.
-        `api_key` prefers a key supplied by the browser over the server's OPENROUTER_API_KEY;
+    Services: stores, OpenRouter and Kev Space clients, catalog, job registry and config loaders
+        from Settings. `api_key` and `hf_token` prefer a value supplied by the browser over the
+        server's OPENROUTER_API_KEY / HF_TOKEN;
         `sweep_interrupted` marks runs, generations and analyses left `running` as interrupted.
 """
 
@@ -15,6 +16,7 @@ from jev_bench.catalog import Catalog
 from jev_bench.generation.config import GenerationConfig, load_generation_config
 from jev_bench.generation.generator import mark_interrupted_generations
 from jev_bench.jobs import JobRegistry
+from jev_bench.kev_space import KevSpaceClient
 from jev_bench.openrouter import OpenRouterClient
 from jev_bench.questions import QuestionSet, load_question_set
 from jev_bench.runner import mark_interrupted_runs
@@ -34,6 +36,9 @@ class Services:
     def __init__(self, settings: Settings, http: httpx2.AsyncClient) -> None:
         self.settings = settings
         self.client = OpenRouterClient(
+            http, max_retries=settings.max_retries, retry_base_delay_s=settings.retry_base_delay_s
+        )
+        self.kev_space = KevSpaceClient(
             http, max_retries=settings.max_retries, retry_base_delay_s=settings.retry_base_delay_s
         )
         self.catalog = Catalog(self.client)
@@ -57,11 +62,17 @@ class Services:
         return load_analysis_config(self.settings.config_dir / "analysis.toml")
 
     def api_key(self, supplied: str | None) -> str | None:
-        cleaned = (supplied or "").strip()
-        return cleaned or self.settings.server_api_key() or None
+        return _prefer(supplied, self.settings.server_api_key())
+
+    def hf_token(self, supplied: str | None) -> str | None:
+        return _prefer(supplied, self.settings.server_hf_token())
 
     def sweep_interrupted(self) -> list[str]:
         runs = mark_interrupted_runs(self.runs, self.jobs.is_running)
         generations = mark_interrupted_generations(self.generations, self.jobs.is_running)
         analyses = mark_interrupted_analyses(self.analyses, self.jobs.is_running)
         return [*runs, *generations, *analyses]
+
+
+def _prefer(supplied: str | None, server: str | None) -> str | None:
+    return (supplied or "").strip() or server or None

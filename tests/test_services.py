@@ -16,6 +16,7 @@ def _unused(request: httpx2.Request) -> httpx2.Response:
     return httpx2.Response(500)
 
 
+@pytest.mark.parametrize("secret", ["api_key", "hf_token"])
 @pytest.mark.parametrize(
     ("server_key", "supplied", "expected"),
     [
@@ -27,13 +28,15 @@ def _unused(request: httpx2.Request) -> httpx2.Response:
         pytest.param(None, "   ", None, id="blank"),
     ],
 )
-async def test_api_key_resolution(
+async def test_secret_resolution(
     make_services: ServicesFactory,
+    secret: str,
     server_key: str | None,
     supplied: str | None,
     expected: str | None,
 ) -> None:
-    assert make_services(_unused, api_key=server_key).api_key(supplied) == expected
+    services = make_services(_unused, **{secret: server_key})
+    assert getattr(services, secret)(supplied) == expected
 
 
 async def test_configs_are_read_from_the_config_dir(make_services: ServicesFactory) -> None:

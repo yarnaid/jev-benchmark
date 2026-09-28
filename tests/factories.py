@@ -258,13 +258,14 @@ def write_mini_config(config_dir: Path) -> None:
     (config_dir / "analysis.toml").write_text(MINI_ANALYSIS_TOML, encoding="utf-8")
 
 
-def mini_settings(root: Path, api_key: str | None = None) -> Settings:
+def mini_settings(root: Path, api_key: str | None = None, hf_token: str | None = None) -> Settings:
     write_mini_config(root / "config")
     return Settings.model_validate(
         {
             "data_dir": root / "data",
             "config_dir": root / "config",
             "openrouter_api_key": api_key,
+            "hf_token": hf_token,
             "max_retries": 0,
             "retry_base_delay_s": 0.0,
         }

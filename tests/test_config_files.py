@@ -60,10 +60,17 @@ def test_shipped_benchmark_config() -> None:
         ("anthropic", "chat", "anthropic/claude-sonnet-5"),
         ("openai", "chat", "openai/gpt-5.6-terra"),
         ("embeddings", "embeddings", "openai/text-embedding-3-large"),
+        ("kev", "kev", "Kev-4B"),
     ]
     assert config.column("anthropic").cache_system_prompt is True
     assert config.column("openai").cache_system_prompt is False
     assert config.embeddings.email_template.startswith("Sent: $sent_at")
+    kev = config.column("kev")
+    assert (kev.effective_slot, kev.models) == ("embeddings", ("Kev-4B", "Kev-0.8B"))
+    assert (config.kev.space_url, config.kev.calibrated) == (
+        "https://jaredpalmer-kev.hf.space",
+        True,
+    )
 
 
 def test_shipped_generation_config() -> None:

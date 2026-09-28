@@ -8,9 +8,9 @@ from typing import Any
 import httpx2
 import pytest
 from pydantic import ValidationError
-from tests.factories import FakeOpenRouter, ServicesFactory, seed_generation
+from tests.factories import FakeKevSpace, FakeOpenRouter, ServicesFactory, seed_generation
 
-from jev_bench.benchmark_config import LlmParams
+from jev_bench.benchmark_config import KevParams, LlmParams
 from jev_bench.run_launcher import RunLaunchError, RunRequest, launch_run
 
 _NOW = datetime(2026, 9, 24, 15, 30, 12, tzinfo=UTC)
@@ -82,6 +82,79 @@ async def test_catalog_outage_falls_back_to_default_limits(make_services: Servic
     assert services.runs.get(meta.id).status == "completed"
 
 
+@pytest.mark.parametrize(
+    ("api_key", "hf_token", "authorization"),
+    [
+        pytest.param(None, None, None, id="anonymous-without-openrouter-key"),
+        pytest.param("sk-test", "hf_test12345678", "Bearer hf_test12345678", id="with-hf-token"),
+    ],
+)
+async def test_launch_kev_run(
+    make_services: ServicesFactory,
+    api_key: str | None,
+    hf_token: str | None,
+    authorization: str | None,
+) -> None:
+    fake = FakeOpenRouter()
+    services = make_services(fake)
+    generation_id = seed_generation(services)
+    request = RunRequest(column="kev", generation_ids=(generation_id,))
+    meta, task = await launch_run(request, api_key, services, hf_token=hf_token, now=_NOW)
+    await task
+    final = services.runs.get(meta.id)
+    assert (meta.kind, meta.mode, meta.model, meta.emails_per_request) == (
+        "kev",
+        "per_email",
+        "Kev-4B",
+        1,
+    )
+    assert (final.status, final.n_done, final.n_errors, final.total_cost) == (
+        "completed",
+        2,
+        0,
+        0.0,
+    )
+    assert final.resolved_models == ("jaredpalmer/kev-4b",)
+    assert isinstance(final.params, KevParams)
+    assert final.params.calibrated is True
+    assert fake.requests == []
+    assert {request.headers.get("authorization") for request in fake.kev.requests} == {
+        authorization
+    }
+
+
+async def test_kev_quota_exhaustion_fails_the_run(make_services: ServicesFactory) -> None:
+    quota = "You have exceeded your GPU quota (15s requested vs. 2s left)."
+    services = make_services(FakeOpenRouter(kev=FakeKevSpace(events=[("error", {"error": quota})])))
+    generation_id = seed_generation(services, emails=3)
+    meta, task = await launch_run(
+        RunRequest(column="kev", generation_ids=(generation_id,)), None, services
+    )
+    await task
+    final = services.runs.get(meta.id)
+    assert final.status == "failed"
+    assert final.error is not None
+    assert "GPU quota" in final.error
+    assert "Traceback" not in final.error
+
+
+async def test_kev_space_without_the_model_fails_before_any_email(
+    make_services: ServicesFactory,
+) -> None:
+    space = FakeKevSpace(models=("Kev-0.8B",))
+    services = make_services(FakeOpenRouter(kev=space))
+    generation_id = seed_generation(services)
+    meta, task = await launch_run(
+        RunRequest(column="kev", generation_ids=(generation_id,)), None, services
+    )
+    await task
+    final = services.runs.get(meta.id)
+    assert (final.status, final.n_done) == ("failed", 0)
+    assert final.error is not None
+    assert "no /decide endpoint serving 'Kev-4B'" in final.error
+    assert [request.method for request in space.requests] == ["GET"]
+
+
 def _request(**fields: Any) -> RunRequest:
     return RunRequest.model_validate(
         {"column": "jev", "generation_ids": ["20260924-100000-seed-abcd"], **fields}
@@ -112,13 +185,28 @@ def _request(**fields: Any) -> RunRequest:
         ),
         pytest.param({}, True, "   ", "an OpenRouter API key is required", id="blank-api-key"),
         pytest.param({}, True, "", "an OpenRouter API key is required", id="empty-api-key"),
+        pytest.param({}, True, None, "an OpenRouter API key is required", id="no-api-key"),
+        pytest.param(
+            {"column": "kev", "mode": "all_in_one"},
+            True,
+            None,
+            "only accepted for chat",
+            id="mode-on-kev",
+        ),
+        pytest.param(
+            {"column": "kev", "model": "Kev-9B"},
+            True,
+            None,
+            "not available",
+            id="kev-model-not-configured",
+        ),
     ],
 )
 async def test_invalid_requests_raise_launch_errors(
     make_services: ServicesFactory,
     request_fields: dict[str, Any],
     seed: bool,
-    api_key: str,
+    api_key: str | None,
     message: str,
 ) -> None:
     services = make_services(FakeOpenRouter())

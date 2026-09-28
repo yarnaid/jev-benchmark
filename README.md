@@ -40,6 +40,7 @@ before you start. To get a key: [create one](https://openrouter.ai/keys) and
 | Anthropic | chat, one email per request or all in one | `anthropic/claude-sonnet-5` |
 | OpenAI | chat, one email per request or all in one | `openai/gpt-5.6-terra` |
 | Embeddings | similarity of the email to each option's text, fixed temperature | `openai/text-embedding-3-large` |
+| Kev (optional, swaps with Embeddings) | Decisions contract on Kev's Hugging Face Space, calibrated probabilities, free (ZeroGPU quota) | `Kev-4B` |
 
 **Questions** (`config/questions.toml`, 18 in the shipped set): a multi-label `category`; four ordered
 scales (`urgency`, `importance`, `sentiment`, `confidentiality`) that also get a 0–100 score; and thirteen
@@ -64,7 +65,7 @@ uv run jev-bench generate [--count 200] [--name generation] [--seed N] [--model 
 uv run jev-bench run COLUMN -g GENERATION_ID [-g ...] [--model ID] [--mode per_email|all_in_one]
 ```
 
-`COLUMN` is a column id from `config/benchmark.toml` (`jev`, `anthropic`, `openai`, `embeddings`). The CLI
+`COLUMN` is a column id from `config/benchmark.toml` (`jev`, `anthropic`, `openai`, `embeddings`, `kev`). The CLI
 and the web UI share the same jobs and data. A run started from the CLI appears in the UI after a page
 reload.
 
@@ -85,6 +86,7 @@ Environment variables (or `.env`):
 | Variable | Default | Meaning |
 |---|---|---|
 | `OPENROUTER_API_KEY` | unset | Server key. A key entered in the browser overrides it for the jobs that browser starts. |
+| `HF_TOKEN` | unset | Optional Hugging Face token for the Kev column: raises its free GPU quota (2 min/day without one, 5 with a free account, 40 with PRO). A token entered in the browser overrides it. |
 | `JEV_BENCH_DATA_DIR` | `data` | Where generations, runs, labels and analyses are stored. |
 | `JEV_BENCH_CONFIG_DIR` | `config` | Where the TOML files are read from. |
 | `JEV_BENCH_REQUEST_TIMEOUT_S` | `60` | Per-request timeout for OpenRouter calls. |
@@ -113,6 +115,7 @@ When the web server starts, it marks runs and generations that were left `runnin
 uv run pytest                                  # default suite: no network, < 5 s
 uv run pytest --cov --cov-fail-under=95        # coverage gate
 uv run pytest -m integration                   # real, PAID OpenRouter calls; needs OPENROUTER_API_KEY
+uv run pytest -m integration tests/test_integration_kev.py   # one real Kev Space call; free, uses GPU quota
 uv run ruff check --fix && uv run ruff format && uv run pyright
 node --check src/jev_bench/web/static/js/*.js  # JS syntax (Node only, no npm)
 node --test tests/js/                          # JS unit tests

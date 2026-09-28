@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 import pytest
 from tests.factories import FakeOpenRouter, ServicesFactory, seed_generation
 
-from jev_bench.benchmark_config import JevParams
+from jev_bench.benchmark_config import JevParams, TokenParams
 from jev_bench.run_estimate import estimate_run
 from jev_bench.run_launcher import RunLaunchError, RunRequest
 from jev_bench.services import Services
@@ -145,3 +145,15 @@ async def test_unpriced_model_has_no_token_cost(make_services: ServicesFactory) 
     )
     assert estimate.token_cost is None
     assert estimate.input_tokens > 0
+
+
+@pytest.mark.parametrize("emails", [pytest.param(1, id="one"), pytest.param(3, id="three")])
+async def test_kev_estimate_is_free(make_services: ServicesFactory, emails: int) -> None:
+    services = make_services(FakeOpenRouter())
+    generation_id = seed_generation(services, emails=emails)
+    estimate = await estimate_run(
+        RunRequest(column="kev", generation_ids=(generation_id,)), services
+    )
+    assert (estimate.n_emails, estimate.n_requests) == (emails, emails)
+    assert (estimate.token_cost, estimate.history_cost) == (0.0, None)
+    assert estimate.output_tokens == emails * TokenParams().jev_output_reserve

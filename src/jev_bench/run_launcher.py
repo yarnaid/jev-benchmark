@@ -6,11 +6,13 @@ Classes:
     ResolvedRun: a validated request's column, model, mode, emails, catalog entry and configs.
 Functions:
     resolve_run: validate a request against the config, stores and catalog (no API key needed).
-    launch_run: persist the initial RunMeta and start the job; returns (meta, task). Raises
-        RunLaunchError for a blank api_key, before any meta is saved.
+    launch_run: persist the initial RunMeta and start the job; returns (meta, task). Kev
+        columns need no OpenRouter key; any other kind raises RunLaunchError without one, before
+        any meta is saved.
     build_classifier: column + model + mode -> Classifier. Chat parameters the model's catalog
         entry does not list (`temperature`, `reasoning`) are not sent, and the run snapshot
-        records them as None; with no catalog entry everything configured is sent.
+        records them as None; with no catalog entry everything configured is sent. Kev gets the
+        Space client and the optional HF token.
 """
 
 import asyncio
@@ -28,12 +30,14 @@ from jev_bench.benchmark_config import (
     ColumnConfig,
     EmbeddingParams,
     JevParams,
+    KevParams,
     LlmParams,
 )
 from jev_bench.catalog import Catalog, ModelInfo
 from jev_bench.classifiers.base import Classifier
 from jev_bench.classifiers.embeddings import EmbeddingClassifier
 from jev_bench.classifiers.jev import JevClassifier
+from jev_bench.classifiers.kev import KevClassifier
 from jev_bench.classifiers.llm import LlmClassifier
 from jev_bench.emails import Email
 from jev_bench.ids import new_id
@@ -53,6 +57,11 @@ __all__ = [
 
 if TYPE_CHECKING:
     from jev_bench.services import Services
+
+_NO_KEY = (
+    "an OpenRouter API key is required: set OPENROUTER_API_KEY (environment or .env) "
+    "or enter a key in the UI"
+)
 
 
 class RunRequest(BaseModel):
@@ -90,12 +99,18 @@ async def resolve_run(request: RunRequest, services: Services) -> ResolvedRun:
 
 
 async def launch_run(
-    request: RunRequest, api_key: str, services: Services, *, now: datetime | None = None
+    request: RunRequest,
+    api_key: str | None,
+    services: Services,
+    *,
+    hf_token: str | None = None,
+    now: datetime | None = None,
 ) -> tuple[RunMeta, asyncio.Task[None]]:
-    if not api_key.strip():
-        raise RunLaunchError("an OpenRouter API key is required")
     column, model, mode, emails, info, questions, config = await resolve_run(request, services)
-    classifier = build_classifier(column, model, mode, info, questions, config, services, api_key)
+    key = _openrouter_key(column, api_key)
+    classifier = build_classifier(
+        column, model, mode, info, questions, config, services, key, hf_token=hf_token
+    )
     params = _params(column, config, model, info)
     meta = _new_meta(
         column, model, mode, request.generation_ids, questions, params, classifier, len(emails), now
@@ -107,6 +122,13 @@ async def launch_run(
         lambda progress: execute_run(meta, emails, classifier, services.runs, progress),
     )
     return meta, task
+
+
+def _openrouter_key(column: ColumnConfig, api_key: str | None) -> str:
+    key = (api_key or "").strip()
+    if not key and column.kind != "kev":
+        raise RunLaunchError(_NO_KEY)
+    return key
 
 
 def _load_config[T](loader: Callable[[], T]) -> T:
@@ -162,8 +184,20 @@ def build_classifier(
     config: BenchmarkConfig,
     services: Services,
     api_key: str,
+    *,
+    hf_token: str | None = None,
 ) -> Classifier:
     client = services.client
+    if column.kind == "kev":
+        return KevClassifier(
+            client=services.kev_space,
+            hf_token=hf_token,
+            model=model,
+            model_info=model_info,
+            questions=questions,
+            params=config.kev,
+            tokens=config.tokens,
+        )
     if column.kind == "decisions":
         return JevClassifier(
             client=client,
@@ -205,7 +239,9 @@ _OPTIONAL_CHAT_PARAMETERS = {"temperature": "temperature", "reasoning_enabled": 
 
 def _params(
     column: ColumnConfig, config: BenchmarkConfig, model: str, model_info: ModelInfo | None
-) -> JevParams | LlmParams | EmbeddingParams:
+) -> JevParams | LlmParams | EmbeddingParams | KevParams:
+    if column.kind == "kev":
+        return config.kev
     if column.kind == "decisions":
         return config.jev
     if column.kind == "embeddings":
@@ -235,7 +271,7 @@ def _new_meta(
     mode: RunMode,
     generation_ids: Sequence[str],
     questions: QuestionSet,
-    params: JevParams | LlmParams | EmbeddingParams,
+    params: JevParams | LlmParams | EmbeddingParams | KevParams,
     classifier: Classifier,
     n_emails: int,
     now: datetime | None,
