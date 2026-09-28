@@ -1,13 +1,13 @@
 /**
- * Shared page chrome: navbar (pages, API-key badge, theme toggle), API-key dialog (with how to get a
- * key), toasts, the delegated Bootstrap tooltips behind every (?) icon, and a job starter that opens the
+ * Shared page chrome: navbar (pages, API-key badge, theme toggle), API-key dialog (OpenRouter key and
+ * optional Hugging Face token, with how to get each), toasts, the delegated Bootstrap tooltips behind every (?) icon, and a job starter that opens the
  * key dialog when the server asks for a key.
  * THEME_EVENT fires on window after the light/dark theme is toggled.
  * Exports: THEME_EVENT, initLayout, keySteps, openKeyModal, toastError, toastSuccess, startJob.
  */
 import { api, needsKey } from "./api.js";
 import { clear, h, icon } from "./dom.js";
-import { forgetKey, getKey, KEY_EVENT, KEY_STEPS, setKey } from "./key.js";
+import { forgetHfToken, forgetKey, getKey, HF_STEPS, KEY_EVENT, KEY_STEPS, setHfToken, setKey } from "./key.js";
 import { readPref, writePref } from "./storage.js";
 
 export const THEME_EVENT = "jev-bench:theme-changed";
@@ -70,16 +70,22 @@ function keyModal() {
     document.activeElement?.blur();
     bootstrap.Modal.getOrCreateInstance(modal).hide();
   };
+  const hfInput = h("input", { class: "form-control font-monospace", type: "password", autocomplete: "off", placeholder: "hf_…", id: "hf-token-input", "aria-label": "Hugging Face token" });
   const save = () => {
-    const value = input.value.trim();
-    if (!value) return;
-    setKey(value);
+    const [key, token] = [input.value.trim(), hfInput.value.trim()];
+    if (!key && !token) return;
+    if (key) setKey(key);
+    if (token) setHfToken(token);
     input.value = "";
+    hfInput.value = "";
     hide();
   };
-  input.addEventListener("keydown", (event) => {
-    if (event.key === "Enter") save();
-  });
+  for (const field of [input, hfInput]) {
+    field.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") save();
+    });
+  }
+  const hfNote = "Optional, for the Kev column only: a Hugging Face token raises Kev's free GPU quota. It is stored only in this browser, sent only when you start a run, and overrides the server's HF_TOKEN.";
   const note = "A key entered here is stored only in this browser (localStorage) and sent only when you start a run, a generation or an analysis. It overrides the server's key, if the server has one.";
   modal.append(
     h(
@@ -89,11 +95,22 @@ function keyModal() {
         "div",
         { class: "modal-content" },
         h("div", { class: "modal-header" }, h("h5", { class: "modal-title", id: "key-modal-title" }, icon("key"), " OpenRouter API key"), h("button", { type: "button", class: "btn-close", "data-bs-dismiss": "modal", "aria-label": "Close" })),
-        h("div", { class: "modal-body" }, h("p", { class: "small text-body-secondary" }, note), input, keyHowTo()),
+        h(
+          "div",
+          { class: "modal-body" },
+          h("p", { class: "small text-body-secondary" }, note),
+          input,
+          keyHowTo(),
+          h("hr"),
+          h("label", { class: "form-label fw-semibold small", for: "hf-token-input" }, "Hugging Face token (optional)"),
+          h("p", { class: "small text-body-secondary" }, hfNote),
+          hfInput,
+          h("details", { class: "mt-3 small" }, h("summary", { class: "fw-semibold" }, icon("question-circle"), " How to get a Hugging Face token"), keySteps(HF_STEPS)),
+        ),
         h(
           "div",
           { class: "modal-footer" },
-          h("button", { type: "button", class: "btn btn-outline-danger me-auto", onclick: () => { forgetKey(); hide(); } }, icon("trash"), " Forget"),
+          h("button", { type: "button", class: "btn btn-outline-danger me-auto", onclick: () => { forgetKey(); forgetHfToken(); hide(); } }, icon("trash"), " Forget keys"),
           h("button", { type: "button", class: "btn btn-primary", onclick: save }, icon("check2"), " Save"),
         ),
       ),
@@ -102,9 +119,9 @@ function keyModal() {
   return modal;
 }
 
-export function keySteps() {
-  const steps = KEY_STEPS.map(([label, href, text]) => h("li", { class: "mb-1" }, h("a", { href, target: "_blank", rel: "noopener noreferrer" }, label, " ", icon("box-arrow-up-right")), h("span", { class: "d-block text-body-secondary" }, text)));
-  return h("ol", { class: "mt-2 mb-0 ps-3" }, steps);
+export function keySteps(steps = KEY_STEPS) {
+  const items = steps.map(([label, href, text]) => h("li", { class: "mb-1" }, h("a", { href, target: "_blank", rel: "noopener noreferrer" }, label, " ", icon("box-arrow-up-right")), h("span", { class: "d-block text-body-secondary" }, text)));
+  return h("ol", { class: "mt-2 mb-0 ps-3" }, items);
 }
 
 function keyHowTo() {
