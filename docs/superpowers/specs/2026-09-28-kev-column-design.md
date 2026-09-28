@@ -142,9 +142,14 @@ slot = "embeddings"
   - The navbar badge keeps showing the OpenRouter key state.
   - The Help page's API-keys section describes both keys and how to create an HF token
     (<https://huggingface.co/settings/tokens>, read access is enough).
-- **Colors:** Kev gets its own hue in `js/palette.js` (`SERIES.kev`) and `--jb-col-kev` / `.accent-kev` in
-  `app.css`, light and dark steps, checked with the dataviz palette validator against the existing six series
-  and the spare slots.
+- **Colors:** the eight validated slots are all in use, and a ninth hue is never generated, so Kev takes the green
+  spare `#008300` (both modes). It goes into `js/palette.js` as `SERIES.kev`, and into `app.css` as
+  `--jb-col-kev` / `.accent-kev`. Red stays the only spare.
+  - Validator results for both orders (Kev beside Embeddings, and Kev swapped in for it):
+    - light: every check passes;
+    - dark: CVD ΔE 6.9 against the reference's amber. That band is legal only with secondary encoding, which
+      every chart has (legend, tooltips, named table rows).
+  - Red fails: normal-vision ΔE 13.2 (light) and 7.8 (dark) against Embeddings' magenta.
 - **Glossary:** new keys for the quota line and the Kev estimate. The node test that every
   `withHelp` / `helpIcon` key exists covers them.
 
