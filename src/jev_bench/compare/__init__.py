@@ -3,11 +3,13 @@
 Re-exports the package's public API:
     RaterKind, Rater, run_label, run_rater, reference_rater, human_rater (jev_bench.compare.raters)
     PairStats (jev_bench.compare.pairs)
+    QualityScore (jev_bench.compare.quality)
     RaterStats, QuestionReport, RaterSummary, ComparisonReport, compare (jev_bench.compare.report)
     EmailRow, email_rows, disagreement_index (jev_bench.compare.rows)
 """
 
 from jev_bench.compare.pairs import PairStats
+from jev_bench.compare.quality import QualityScore
 from jev_bench.compare.raters import (
     Rater,
     RaterKind,
@@ -29,6 +31,7 @@ __all__ = [
     "ComparisonReport",
     "EmailRow",
     "PairStats",
+    "QualityScore",
     "QuestionReport",
     "Rater",
     "RaterKind",

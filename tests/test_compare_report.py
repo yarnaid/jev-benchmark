@@ -14,6 +14,7 @@ from tests.compare_data import (
     build_answers,
     build_reference,
     build_run_a,
+    build_run_b,
     rater,
     topics_answers,
 )
@@ -73,6 +74,19 @@ def test_reference_rater_excluded_from_fleiss(questions: QuestionSet, run_a: Rat
     report = compare([run_a, reference], questions, resamples=50)
     category = next(q for q in report.questions if q.id == "category")
     assert category.fleiss_kappa is None
+
+
+def test_quality_scores_every_run_against_the_hard_raters(
+    questions: QuestionSet, run_a: Rater
+) -> None:
+    raters = [run_a, build_run_b(questions), build_reference(questions)]
+    report = compare(raters, questions, resamples=20)
+    assert [(score.rater, score.target) for score in report.quality] == [
+        ("a", "reference"),
+        ("b", "reference"),
+    ]
+    assert report.quality[0].n_questions == 3
+    assert report.quality[0].agreement == pytest.approx((0.75 + 0.5 + 0.5) / 3)
 
 
 def _no_overlap_report(questions: QuestionSet) -> ComparisonReport:

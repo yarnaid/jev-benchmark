@@ -7,7 +7,8 @@ Classes:
     QuestionReport: one question's rater stats, pairs, Fleiss' kappa (the macro Fleiss' kappa over
         applied labels for a multi question), skipped raters and the threshold used (multi only).
     RaterSummary: one rater's identity and item count, with its RunMeta if it is a run.
-    ComparisonReport: the full report (rater summaries, per-question reports, warnings).
+    ComparisonReport: the full report (rater summaries, per-question reports, the quality of every
+        run against the hard raters, warnings).
 Functions:
     compare: full per-question report for a set of raters against a base question set;
         `threshold` overrides every multi question's own threshold.
@@ -29,6 +30,7 @@ from jev_bench.compare.pairs import (
     resample_index_cache,
     slice_matrix,
 )
+from jev_bench.compare.quality import QualityScore, quality_scores
 from jev_bench.compare.raters import Rater, RaterKind
 from jev_bench.metrics.agreement import fleiss_kappa
 from jev_bench.metrics.distributions import (
@@ -86,6 +88,7 @@ class RaterSummary(BaseModel):
 class ComparisonReport(BaseModel):
     raters: list[RaterSummary]
     questions: list[QuestionReport]
+    quality: list[QualityScore]
     warnings: list[str]
 
 
@@ -119,7 +122,11 @@ def compare(
         )
         for rater in raters
     ]
-    return ComparisonReport(raters=summaries, questions=questions, warnings=warnings)
+    pairs = (pair for question in questions for pair in question.pairs)
+    quality = quality_scores(pairs, {rater.id: rater.kind for rater in raters})
+    return ComparisonReport(
+        raters=summaries, questions=questions, quality=quality, warnings=warnings
+    )
 
 
 def _question_report(
