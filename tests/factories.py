@@ -6,6 +6,9 @@ Classes:
     FakeOpenRouter: MockTransport handler serving /v1/models, /alpha/decisions,
         /v1/chat/completions and /v1/embeddings for the mini question set. A chat request without
         `response_format` is an analysis: it streams `analysis_parts` with `analysis_finish`.
+        /gradio_api/ paths go to its FakeKevSpace (`kev`).
+    FakeKevSpace: MockTransport handler for Kev's Space (/gradio_api/info, call, result stream);
+        a refused call echoes the Authorization header.
 Functions:
     chat_body: OpenRouter chat completion response.
     sse_body: OpenRouter streaming chat completion response.
@@ -374,6 +377,41 @@ def _vector(text: str) -> list[float]:
     return [float(len(text)), 1.0, float(sum(map(ord, text)) % 7)]
 
 
+_KEV_EVENTS: tuple[tuple[str, object], ...] = (
+    ("heartbeat", None),
+    ("complete", ["<div>", KEV_RESPONSE, ""]),
+)
+
+
+class FakeKevSpace:
+    def __init__(
+        self,
+        *,
+        models: Sequence[str] = ("Kev-4B", "Kev-0.8B"),
+        events: Sequence[tuple[str, object]] = _KEV_EVENTS,
+        call_status: int = 200,
+    ) -> None:
+        self.models = models
+        self.events = events
+        self.call_status = call_status
+        self.requests: list[httpx2.Request] = []
+
+    def __call__(self, request: httpx2.Request) -> httpx2.Response:
+        self.requests.append(request)
+        if request.url.path.endswith("/gradio_api/info"):
+            return httpx2.Response(200, json=space_info(self.models))
+        if request.method == "POST":
+            return self._call(request)
+        stream = space_events(*self.events)
+        return httpx2.Response(200, content=stream, headers={"content-type": "text/event-stream"})
+
+    def _call(self, request: httpx2.Request) -> httpx2.Response:
+        if self.call_status != 200:
+            echoed = request.headers.get("authorization", "")
+            return httpx2.Response(self.call_status, text=f"refused: {echoed}")
+        return httpx2.Response(200, json={"event_id": f"ev{len(self.requests)}"})
+
+
 class FakeOpenRouter:
     def __init__(
         self,
@@ -382,7 +420,9 @@ class FakeOpenRouter:
         chat_parameters: tuple[str, ...] = CHAT_PARAMETERS,
         analysis_parts: Sequence[str] = ANALYSIS_PARTS,
         analysis_finish: str = "stop",
+        kev: FakeKevSpace | None = None,
     ) -> None:
+        self.kev = kev or FakeKevSpace()
         self.models_status = models_status
         self.chat_parameters = chat_parameters
         self.analysis_parts = analysis_parts
@@ -390,6 +430,8 @@ class FakeOpenRouter:
         self.requests: list[httpx2.Request] = []
 
     def __call__(self, request: httpx2.Request) -> httpx2.Response:
+        if "/gradio_api/" in request.url.path:
+            return self.kev(request)
         self.requests.append(request)
         path = request.url.path
         if path.endswith("/v1/models"):
