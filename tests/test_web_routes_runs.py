@@ -6,14 +6,7 @@ from typing import TYPE_CHECKING
 
 import httpx2
 import pytest
-from tests.factories import (
-    AppFactory,
-    FakeKevSpace,
-    FakeOpenRouter,
-    poll,
-    seed_generation,
-    services_of,
-)
+from tests.factories import AppFactory, FakeOpenRouter, poll, seed_generation, services_of
 
 if TYPE_CHECKING:
     from loguru import Message
@@ -157,45 +150,6 @@ def test_browser_key_is_used_but_never_persisted_or_logged(
     assert stored
     assert all(_SENTINEL not in text for text in stored)
     assert all(_SENTINEL not in str(message) for message in log_records)
-
-
-_HF_SENTINEL = "hf_SENTINELtoken4242"
-
-
-@pytest.mark.parametrize(
-    ("status", "expected_status"),
-    [
-        pytest.param(200, "completed", id="success"),
-        pytest.param(401, "failed", id="space-refusal-401"),
-    ],
-)
-def test_browser_hf_token_is_used_but_never_persisted_or_logged(
-    make_app: AppFactory,
-    tmp_path: Path,
-    log_records: list[Message],
-    status: int,
-    expected_status: str,
-) -> None:
-    space = FakeKevSpace(call_status=status)
-    upstream = FakeOpenRouter(kev=space)
-    client = make_app(upstream)
-    generation_id = seed_generation(services_of(client))
-    created = client.post(
-        "/api/runs",
-        json={"column": "kev", "generation_ids": [generation_id]},
-        headers={"X-HF-Token": _HF_SENTINEL},
-    )
-    assert created.status_code == 202
-    final = poll(client, f"/api/runs/{created.json()['meta']['id']}", until=_done)
-    assert final["meta"]["status"] == expected_status
-    assert space.requests
-    assert all(r.headers["Authorization"] == f"Bearer {_HF_SENTINEL}" for r in space.requests)
-    assert upstream.requests == []
-    data_files = (path for path in (tmp_path / "data").rglob("*") if path.is_file())
-    stored = [path.read_text(encoding="utf-8") for path in data_files]
-    assert stored
-    assert all(_HF_SENTINEL not in text for text in stored)
-    assert all(_HF_SENTINEL not in str(message) for message in log_records)
 
 
 def test_cancel_running_run(make_app: AppFactory) -> None:

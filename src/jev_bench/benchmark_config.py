@@ -5,9 +5,8 @@ Types:
 Constants:
     EMAIL_PLACEHOLDERS, OPTION_PLACEHOLDERS: placeholders allowed in embedding templates.
 Classes:
-    ColumnConfig: one benchmark column (kind, catalog filter or static models, default model,
-        card slot).
-    KevParams: Kev Space request parameters (snapshotted into runs).
+    ColumnConfig: one UI column (kind, catalog filter, default model, card slot: columns sharing a
+        slot share one Benchmark card; `effective_slot` defaults to the column id).
     JevParams, LlmParams, EmbeddingParams: per-kind request parameters (snapshotted into runs;
         an LlmParams `temperature` / `reasoning_enabled` of None means "not sent" because the
         model does not support it).
@@ -34,14 +33,13 @@ __all__ = [
     "ColumnKind",
     "EmbeddingParams",
     "JevParams",
-    "KevParams",
     "LlmParams",
     "Modality",
     "TokenParams",
     "load_benchmark_config",
 ]
 
-type ColumnKind = Literal["decisions", "chat", "embeddings", "kev"]
+type ColumnKind = Literal["decisions", "chat", "embeddings"]
 type ChatMode = Literal["per_email", "all_in_one"]
 type Modality = Literal["text", "decisions", "embeddings"]
 
@@ -60,44 +58,15 @@ class ColumnConfig(_Frozen):
     id: str = Field(pattern=_SLUG)
     title: str
     kind: ColumnKind
-    modality: Modality | None = None
+    modality: Modality
     prefix: str | None = None
     default_model: str
-    models: tuple[str, ...] = ()
     slot: str | None = Field(default=None, pattern=_SLUG)
     cache_system_prompt: bool = False
-
-    @model_validator(mode="after")
-    def _kind_fields(self) -> ColumnConfig:
-        if self.kind == "kev":
-            _check_static_column(self)
-        elif self.modality is None or self.models:
-            raise ValueError(
-                f"column {self.id!r}: a {self.kind} column needs a modality, no models"
-            )
-        return self
 
     @property
     def effective_slot(self) -> str:
         return self.slot or self.id
-
-
-def _check_static_column(column: ColumnConfig) -> None:
-    if column.modality is not None or column.prefix is not None:
-        raise ValueError(f"column {column.id!r}: a kev column takes no modality or prefix")
-    if column.default_model not in column.models:
-        raise ValueError(f"column {column.id!r}: default_model must be one of models")
-
-
-class KevParams(_Frozen):
-    kind: Literal["kev"] = "kev"
-    space_url: str = Field(
-        default="https://jaredpalmer-kev.hf.space", pattern=r"^https?://[^/\s]+$"
-    )
-    api_name: str = Field(default="decide", pattern=r"^[a-z_]+$")
-    calibrated: bool = True
-    concurrency: int = Field(default=2, ge=1)
-    timeout_s: float = Field(default=300.0, gt=0)
 
 
 class JevParams(_Frozen):
@@ -152,7 +121,6 @@ class BenchmarkConfig(_Frozen):
     jev: JevParams = JevParams()
     llm: LlmParams
     embeddings: EmbeddingParams
-    kev: KevParams = KevParams()
     tokens: TokenParams = TokenParams()
     columns: tuple[ColumnConfig, ...] = Field(min_length=1)
 

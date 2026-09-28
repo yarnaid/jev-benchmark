@@ -2,7 +2,7 @@
 report the outcome.
 
 Constants:
-    NO_KEY: the generation command's missing-key message (runs report the launcher's).
+    NO_KEY
 Functions:
     generate_and_wait: run one generation to completion; returns the exit code.
     run_and_wait: run one benchmark column to completion; returns the exit code.
@@ -77,10 +77,11 @@ async def run_and_wait(
     except ValidationError as exc:
         return _fail(f"invalid run request: {exc.errors()[0]['msg']}")
     async with _services(settings, http) as services:
+        key = services.api_key(None)
+        if key is None:
+            return _fail(NO_KEY)
         try:
-            meta, task = await launch_run(
-                request, services.api_key(None), services, hf_token=services.hf_token(None)
-            )
+            meta, task = await launch_run(request, key, services)
         except RunLaunchError as exc:
             return _fail(str(exc))
         await _watch(services, meta.id, task, f"{meta.column} · {meta.model}")

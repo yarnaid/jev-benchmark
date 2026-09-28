@@ -6,7 +6,6 @@
 import { api } from "./api.js";
 import { clear, h, icon } from "./dom.js";
 import { GLOSSARY } from "./glossary.js";
-import { HF_STEPS } from "./key.js";
 import { initLayout, keySteps, toastError } from "./layout.js";
 
 const TYPE_TEXT = {
@@ -84,8 +83,8 @@ function questionSection() {
 }
 
 function keySection() {
-  const override = "Enter your keys with the key button in the top bar. They are stored only in your browser. The OpenRouter key is sent only when you start a run, a generation or an analysis; the Hugging Face token only when you start a run. Each takes precedence over the server's OPENROUTER_API_KEY / HF_TOKEN.";
-  return card("keys", "key", "API keys", keySteps(), keySteps(HF_STEPS), h("p", { class: "mb-0 mt-2" }, override));
+  const override = "Enter your key with the key button in the top bar. It is stored only in your browser, sent only when you start a run, a generation or an analysis, and it takes precedence over the server's key.";
+  return card("keys", "key", "API keys", keySteps(), h("p", { class: "mb-0 mt-2" }, override));
 }
 
 async function fillQuestions() {

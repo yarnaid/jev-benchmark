@@ -1,5 +1,4 @@
-"""Catalog route: every benchmark column with its selectable models (OpenRouter, or static for
-Kev) and card slot.
+"""Catalog route: every benchmark column with its selectable OpenRouter models and card slot.
 
 Classes:
     CatalogModel, CatalogColumn
@@ -47,7 +46,6 @@ class CatalogColumn(BaseModel):
     embedding_temperature: float | None = None
     emails_per_request: int | None = None
     slot: str
-    calibrated: bool | None = None
 
 
 @router.get("/catalog")
@@ -78,7 +76,6 @@ async def _column(
         embedding_temperature=config.embeddings.temperature if embeddings else None,
         emails_per_request=config.embeddings.emails_per_request if embeddings else None,
         slot=column.effective_slot,
-        calibrated=config.kev.calibrated if column.kind == "kev" else None,
     )
 
 

@@ -15,7 +15,6 @@ import { columnCard, estimateBlock, statsBlock } from "./column-card.js";
 import { clear, h, icon } from "./dom.js";
 import { initLayout, startJob, THEME_EVENT, toastError } from "./layout.js";
 import { hideTooltips } from "./glossary.js";
-import { getHfToken, KEY_EVENT } from "./key.js";
 import { cardQuality, qualityBlock } from "./quality.js";
 import { renderReport } from "./report.js";
 import { defaultRunIds, generationChoices, initialGenerations, orderByColumn, runChoices, sameSet } from "./selection.js";
@@ -38,7 +37,6 @@ const state = {
   threshold: readPref("threshold", null),
   sliderShown: false,
   report: null,
-  serverHfToken: false,
 };
 
 const selectedSet = () => new Set(state.selected);
@@ -48,9 +46,8 @@ const modeOf = (column) => readPref(`benchmark.mode.${column.id}`, "per_email");
 async function main() {
   await initLayout();
   const requested = (new URLSearchParams(location.search).get("runs") ?? "").split(",").filter(Boolean);
-  const [catalog, generations, runs, status] = await Promise.all([api.catalog(), api.generations(), api.runs(), api.status()]);
+  const [catalog, generations, runs] = await Promise.all([api.catalog(), api.generations(), api.runs()]);
   state.catalog = catalog;
-  state.serverHfToken = status.server_hf_token;
   state.generations = generations.map((view) => view.meta).filter((meta) => meta.done > 0);
   state.runs = runs.map((view) => view.meta);
   state.selected = initialGenerations(state.generations, state.runs, requested, readPref("benchmark.generations", []));
@@ -58,7 +55,6 @@ async function main() {
   state.chosen = state.explicit ? requested : defaultRuns();
   renderPickers();
   renderColumns();
-  window.addEventListener(KEY_EVENT, renderColumns);
   trackRunning();
   window.addEventListener(THEME_EVENT, redrawReport);
   await refreshComparison();
@@ -67,7 +63,6 @@ async function main() {
 const picks = () => slotPicks(state.catalog, (key) => readPref(key, null));
 const shownColumns = () => visibleColumns(state.catalog, picks());
 const defaultRuns = () => defaultRunIds(state.runs, state.selected, state.catalog, hiddenColumnIds(state.catalog, picks()));
-const quotaSource = () => (getHfToken() ? "your token" : state.serverHfToken ? "server token" : "anonymous (2 min/day)");
 
 function renderPickers() {
   const generations = checklist({ label: "Generations", items: generationChoices(state.generations), selected: state.selected, onChange: onGenerations });
@@ -123,7 +118,6 @@ function renderColumns() {
       mode: modeOf(column),
       running: currentRun(column.id)?.status === "running",
       siblings: columns,
-      quota: quotaSource(),
       onSwap: (id) => swapSlot(slot, id),
       onModel: (value) => savePref(column, "model", value),
       onMode: (value) => savePref(column, "mode", value),
@@ -162,7 +156,7 @@ function scheduleEstimate(column, delay = ESTIMATE_DELAY_MS) {
 async function refreshEstimate(column, token) {
   const show = (estimate) => {
     const target = document.getElementById(`estimate-${column.id}`);
-    if (target && state.estimates.get(column.id) === token) replaceContent(target, estimateBlock(estimate, column));
+    if (target && state.estimates.get(column.id) === token) replaceContent(target, estimateBlock(estimate));
   };
   if (!state.selected.length) return show(null);
   show(await api.estimateRun(requestBody(column, modelOf(column))).catch((error) => error));

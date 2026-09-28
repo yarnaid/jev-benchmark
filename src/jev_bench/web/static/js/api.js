@@ -1,10 +1,9 @@
 /**
- * JSON client for the /api endpoints; the browser-stored OpenRouter key is attached only to job-starting
- * calls, and the Hugging Face token only to run creation.
+ * JSON client for the /api endpoints; the browser-stored key is attached only to job-starting calls.
  * Query parameters that are undefined, null or "" are omitted (an unset label threshold is never sent).
  * Exports: api, ApiError, needsKey.
  */
-import { getHfToken, getKey } from "./key.js";
+import { getKey } from "./key.js";
 
 export class ApiError extends Error {
   constructor(status, detail) {
@@ -13,13 +12,11 @@ export class ApiError extends Error {
   }
 }
 
-async function request(method, path, { body, withKey = false, withHfToken = false } = {}) {
+async function request(method, path, { body, withKey = false } = {}) {
   const headers = { Accept: "application/json" };
   if (body !== undefined) headers["Content-Type"] = "application/json";
   const key = withKey ? getKey() : null;
   if (key) headers["X-OpenRouter-Key"] = key;
-  const hfToken = withHfToken ? getHfToken() : null;
-  if (hfToken) headers["X-HF-Token"] = hfToken;
   const response = await fetch(`/api${path}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
   const isJson = (response.headers.get("content-type") ?? "").includes("json");
   const payload = isJson ? await response.json() : await response.text();
@@ -46,7 +43,7 @@ export const api = {
   cancelGeneration: (id) => request("POST", `/generations/${segment(id)}/cancel`),
   runs: (generationIds = []) => request("GET", `/runs${query({ generations: generationIds.join(",") })}`),
   run: (id) => request("GET", `/runs/${segment(id)}`),
-  createRun: (body) => request("POST", "/runs", { body, withKey: true, withHfToken: true }),
+  createRun: (body) => request("POST", "/runs", { body, withKey: true }),
   cancelRun: (id) => request("POST", `/runs/${segment(id)}/cancel`),
   compare: (runIds, threshold) => request("GET", `/compare${query({ runs: runIds.join(","), threshold })}`),
   emails: (generationIds, runIds = [], threshold) =>

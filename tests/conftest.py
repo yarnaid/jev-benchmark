@@ -10,7 +10,6 @@ Fixtures:
     make_services: async Services factory on tmp dirs.
     make_app: TestClient factory with the lifespan entered.
     log_records: worst-case loguru sink (diagnose=True, backtrace=True) for leak regression tests.
-    _no_hf_token_in_env (autouse): HF users often export HF_TOKEN; only integration tests see it.
 Hooks:
     pytest_configure: pre-warm numpy.random module.
     pytest_collection_modifyitems: mark tests listed in tests/slow_tests.txt as `slow`.
@@ -60,12 +59,6 @@ def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
     for item in items:
         if item.nodeid in slow:
             item.add_marker(pytest.mark.slow)
-
-
-@pytest.fixture(autouse=True)
-def _no_hf_token_in_env(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) -> None:
-    if request.node.get_closest_marker("integration") is None:
-        monkeypatch.delenv("HF_TOKEN", raising=False)
 
 
 @pytest.fixture
@@ -139,14 +132,12 @@ async def make_services(
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
     opened: list[httpx2.AsyncClient] = []
 
-    def build(
-        handler: Handler, *, api_key: str | None = None, hf_token: str | None = None
-    ) -> Services:
+    def build(handler: Handler, *, api_key: str | None = None) -> Services:
         http = httpx2.AsyncClient(
             base_url="https://openrouter.test/api", transport=httpx2.MockTransport(handler)
         )
         opened.append(http)
-        return Services(mini_settings(tmp_path, api_key, hf_token), http)
+        return Services(mini_settings(tmp_path, api_key), http)
 
     yield build
     for http in opened:
@@ -162,13 +153,11 @@ def make_app(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[AppFac
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
     clients: list[TestClient] = []
 
-    def build(
-        handler: Handler, *, api_key: str | None = None, hf_token: str | None = None
-    ) -> TestClient:
+    def build(handler: Handler, *, api_key: str | None = None) -> TestClient:
         http = httpx2.AsyncClient(
             base_url="https://openrouter.test/api", transport=httpx2.MockTransport(handler)
         )
-        client = TestClient(create_app(mini_settings(tmp_path, api_key, hf_token), http=http))
+        client = TestClient(create_app(mini_settings(tmp_path, api_key), http=http))
         client.__enter__()
         clients.append(client)
         return client

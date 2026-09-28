@@ -80,6 +80,7 @@ def _seed(services: Services) -> None:
         pytest.param("anthropic", "all_in_one", id="anthropic-all-in-one"),
         pytest.param("openai", "per_email", id="openai-per-email"),
         pytest.param("embeddings", None, id="embeddings"),
+        pytest.param("kev", None, id="kev"),
     ],
 )
 async def test_one_email_per_column(

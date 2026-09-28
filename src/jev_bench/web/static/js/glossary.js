@@ -33,8 +33,6 @@ export const GLOSSARY = [
       ["latency", "Latency p50 / p95", "Time one API call took: p50 is the typical call, p95 the slow case (95% of calls were faster). Lower is faster."],
       ["cache_hits", "Cache hits", "Embeddings only: emails answered from the local cache instead of a new, paid API call."],
       ["estimate", "Estimated cost", "Expected cost before you start. \"Past runs\" scales what earlier runs of the same model really cost; \"tokens\" is an upper bound from the text size and list prices."],
-      ["gpu_quota", "GPU quota", "Kev runs on Hugging Face's free ZeroGPU. Each email uses a fraction of a second of a daily GPU allowance: 2 minutes without a token, 5 with a free account's token, 40 with PRO."],
-      ["kev_estimate", "Estimated cost (Kev)", "Kev costs no money: it runs on a free Hugging Face Space. The real limit is the daily GPU quota of the token in use, or of this machine without one."],
     ],
   },
   {

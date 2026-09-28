@@ -6,17 +6,12 @@ Classes:
     FakeOpenRouter: MockTransport handler serving /v1/models, /alpha/decisions,
         /v1/chat/completions and /v1/embeddings for the mini question set. A chat request without
         `response_format` is an analysis: it streams `analysis_parts` with `analysis_finish`.
-        /gradio_api/ paths go to its FakeKevSpace (`kev`).
-    FakeKevSpace: MockTransport handler for Kev's Space (/gradio_api/info, call, result stream);
-        a refused call echoes the Authorization header; a failing info serves SPACE_ASLEEP_PAGE.
 Functions:
     chat_body: OpenRouter chat completion response.
     sse_body: OpenRouter streaming chat completion response.
     write_mini_config: write a mini questions/benchmark/generation TOML config to a directory.
     mini_settings: isolated Settings over a mini config, reading no env or `.env`.
     generator_output: JSON text of one generator response.
-    space_events: Gradio server-sent events body.
-    space_info: Kev Space /gradio_api/info body serving the given models.
     seed_generation: save a completed GenerationMeta plus its emails to services.generations.
     services_of: typed access to a TestClient's app.state.services.
     poll: GET a path repeatedly until a predicate on its JSON body holds, or fail.
@@ -28,8 +23,6 @@ Constants:
     CHAT_PARAMETERS: the fake catalog's supported_parameters for chat models (like the real
         Claude Sonnet 5 / GPT-5.6 Terra entries: no `temperature`).
     ANALYSIS_PARTS: the fake analyst's streamed Markdown.
-    KEV_RESPONSE: a Kev /v1/systemone response (Jev's answers, no cost).
-    SPACE_ASLEEP_PAGE: the kind of HTML page Hugging Face serves for a sleeping Space.
 Types:
     ClientFactory: type of the make_client fixture.
     ServicesFactory: type of the make_services fixture.
@@ -193,15 +186,12 @@ option_template = "$option"
 emails_per_request = 2
 concurrency = 2
 
-[kev]
-space_url = "https://kev.test"
-timeout_s = 0.5
-
 [[columns]]
 id = "jev"
 title = "Jev"
 kind = "decisions"
 modality = "decisions"
+prefix = "typesafe/"
 default_model = "typesafe/jev-1.13"
 
 [[columns]]
@@ -223,9 +213,10 @@ default_model = "openai/text-embedding-3-large"
 [[columns]]
 id = "kev"
 title = "Kev"
-kind = "kev"
-models = ["Kev-4B", "Kev-0.8B"]
-default_model = "Kev-4B"
+kind = "decisions"
+modality = "decisions"
+prefix = "jaredpalmer/"
+default_model = "jaredpalmer/kev-4b"
 slot = "embeddings"
 """
 
@@ -259,14 +250,13 @@ def write_mini_config(config_dir: Path) -> None:
     (config_dir / "analysis.toml").write_text(MINI_ANALYSIS_TOML, encoding="utf-8")
 
 
-def mini_settings(root: Path, api_key: str | None = None, hf_token: str | None = None) -> Settings:
+def mini_settings(root: Path, api_key: str | None = None) -> Settings:
     write_mini_config(root / "config")
     return Settings.model_validate(
         {
             "data_dir": root / "data",
             "config_dir": root / "config",
             "openrouter_api_key": api_key,
-            "hf_token": hf_token,
             "max_retries": 0,
             "retry_base_delay_s": 0.0,
         }
@@ -317,17 +307,6 @@ JEV_ANSWERS: dict[str, Any] = {
         "probabilities": {"billing": 0.7, "meeting": 0.2, "travel": 0.1},
     },
 }
-SPACE_ASLEEP_PAGE = (
-    '<!DOCTYPE html>\n<html class="">\n<head>\n    <meta charset="utf-8" />\n'
-    "    <title>Kev - a Hugging Face Space by jaredpalmer</title>\n</head>\n"
-    "<body><h1>This Space is sleeping due to inactivity</h1></body>\n</html>\n"
-)
-KEV_RESPONSE: dict[str, Any] = {
-    "model": "jaredpalmer/kev-4b",
-    "answers": JEV_ANSWERS,
-    "usage": {"input_tokens": 71, "output_tokens": 185},
-    "latency_ms": 117.0,
-}
 CHAT_PARAMETERS = ("max_tokens", "reasoning", "response_format", "structured_outputs")
 ANALYSIS_PARTS = ("## Executive summary\n", "- Jev agrees with the reference.\n")
 _CATALOG: dict[str, list[dict[str, Any]]] = {
@@ -353,7 +332,13 @@ _CATALOG: dict[str, list[dict[str, Any]]] = {
             "name": "Jev 1.13",
             "pricing": {"prompt": "0.000000042"},
             "context_length": 32000,
-        }
+        },
+        {
+            "id": "jaredpalmer/kev-4b",
+            "name": "Kev 4B",
+            "pricing": {"prompt": "0.000000042"},
+            "context_length": 8192,
+        },
     ],
     "embeddings": [
         {
@@ -366,65 +351,8 @@ _CATALOG: dict[str, list[dict[str, Any]]] = {
 }
 
 
-def space_events(*events: tuple[str, object]) -> bytes:
-    return "".join(f"event: {name}\ndata: {json.dumps(data)}\n\n" for name, data in events).encode()
-
-
-def space_info(models: Sequence[str]) -> dict[str, Any]:
-    choice = {
-        "parameter_name": "model_choice",
-        "type": {"enum": [*models, "Both"], "type": "string"},
-    }
-    return {
-        "named_endpoints": {"/decide": {"parameters": [{"parameter_name": "state_text"}, choice]}}
-    }
-
-
 def _vector(text: str) -> list[float]:
     return [float(len(text)), 1.0, float(sum(map(ord, text)) % 7)]
-
-
-_KEV_EVENTS: tuple[tuple[str, object], ...] = (
-    ("heartbeat", None),
-    ("complete", ["<div>", KEV_RESPONSE, ""]),
-)
-
-
-class FakeKevSpace:
-    def __init__(
-        self,
-        *,
-        models: Sequence[str] = ("Kev-4B", "Kev-0.8B"),
-        events: Sequence[tuple[str, object]] = _KEV_EVENTS,
-        call_status: int = 200,
-        info_status: int = 200,
-    ) -> None:
-        self.models = models
-        self.info_status = info_status
-        self.events = events
-        self.call_status = call_status
-        self.requests: list[httpx2.Request] = []
-
-    def __call__(self, request: httpx2.Request) -> httpx2.Response:
-        self.requests.append(request)
-        if request.url.path.endswith("/gradio_api/info"):
-            return self._info()
-        if request.method == "POST":
-            return self._call(request)
-        stream = space_events(*self.events)
-        return httpx2.Response(200, content=stream, headers={"content-type": "text/event-stream"})
-
-    def _info(self) -> httpx2.Response:
-        if self.info_status != 200:
-            headers = {"content-type": "text/html; charset=utf-8"}
-            return httpx2.Response(self.info_status, text=SPACE_ASLEEP_PAGE, headers=headers)
-        return httpx2.Response(200, json=space_info(self.models))
-
-    def _call(self, request: httpx2.Request) -> httpx2.Response:
-        if self.call_status != 200:
-            echoed = request.headers.get("authorization", "")
-            return httpx2.Response(self.call_status, text=f"refused: {echoed}")
-        return httpx2.Response(200, json={"event_id": f"ev{len(self.requests)}"})
 
 
 class FakeOpenRouter:
@@ -435,9 +363,7 @@ class FakeOpenRouter:
         chat_parameters: tuple[str, ...] = CHAT_PARAMETERS,
         analysis_parts: Sequence[str] = ANALYSIS_PARTS,
         analysis_finish: str = "stop",
-        kev: FakeKevSpace | None = None,
     ) -> None:
-        self.kev = kev or FakeKevSpace()
         self.models_status = models_status
         self.chat_parameters = chat_parameters
         self.analysis_parts = analysis_parts
@@ -445,8 +371,6 @@ class FakeOpenRouter:
         self.requests: list[httpx2.Request] = []
 
     def __call__(self, request: httpx2.Request) -> httpx2.Response:
-        if "/gradio_api/" in request.url.path:
-            return self.kev(request)
         self.requests.append(request)
         path = request.url.path
         if path.endswith("/v1/models"):
@@ -457,7 +381,7 @@ class FakeOpenRouter:
         if path.endswith("/alpha/decisions"):
             usage = {"input_tokens": 100, "output_tokens": 10, "cost": 0.00001}
             return httpx2.Response(
-                200, json={"model": "typesafe/jev-1.13", "answers": JEV_ANSWERS, "usage": usage}
+                200, json={"model": body["model"], "answers": JEV_ANSWERS, "usage": usage}
             )
         if path.endswith("/v1/embeddings"):
             data = [

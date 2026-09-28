@@ -5,8 +5,7 @@ Constants:
 Classes:
     RunView: meta + live progress.
 Functions:
-    list_runs, create_run, get_run, cancel_run: route handlers. create_run requires the
-        OpenRouter key except for Kev columns; the HF token is optional.
+    list_runs, create_run, get_run, cancel_run: route handlers.
     estimate_run_cost: POST /runs/estimate, the preliminary cost of a run (no key needed).
 """
 
@@ -18,7 +17,7 @@ from jev_bench.run_estimate import RunEstimate, estimate_run
 from jev_bench.run_launcher import RunLaunchError, RunRequest, launch_run
 from jev_bench.services import Services
 from jev_bench.store.runs import RunMeta
-from jev_bench.web.deps import HfTokenDep, OptionalApiKeyDep, ServicesDep, split_ids
+from jev_bench.web.deps import ApiKeyDep, ServicesDep, split_ids
 from jev_bench.web.views import CancelView, load_or_404
 
 __all__ = [
@@ -55,11 +54,9 @@ def list_runs(services: ServicesDep, generations: str | None = None) -> list[Run
 
 
 @router.post("/runs", status_code=202, response_model_exclude=LIGHT)
-async def create_run(
-    request: RunRequest, services: ServicesDep, api_key: OptionalApiKeyDep, hf_token: HfTokenDep
-) -> RunView:
+async def create_run(request: RunRequest, services: ServicesDep, api_key: ApiKeyDep) -> RunView:
     try:
-        meta, _ = await launch_run(request, api_key, services, hf_token=hf_token)
+        meta, _ = await launch_run(request, api_key, services)
     except RunLaunchError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return _view(services, meta)

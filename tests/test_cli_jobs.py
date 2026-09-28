@@ -68,7 +68,6 @@ async def test_generate_launch_error_is_exit_2(tmp_path: Path) -> None:
         pytest.param("jev", "batched", "sk-test", 2, id="invalid-mode"),
         pytest.param("missing", None, "sk-test", 2, id="unknown-column"),
         pytest.param("jev", None, None, 2, id="no-key"),
-        pytest.param("kev", None, None, 0, id="kev-without-openrouter-key"),
     ],
 )
 async def test_run_and_wait(

@@ -46,13 +46,6 @@ emails_per_request = 32
 max_request_tokens = 100000
 concurrency = 4
 
-[kev]
-space_url = "https://jaredpalmer-kev.hf.space"
-api_name = "decide"
-calibrated = true
-concurrency = 2
-timeout_s = 300
-
 [tokens]
 bytes_per_token = 3.0
 jev_output_reserve = 1000
@@ -64,6 +57,7 @@ id = "jev"
 title = "Jev"
 kind = "decisions"
 modality = "decisions"
+prefix = "typesafe/"
 default_model = "typesafe/jev-1.13"
 
 [[columns]]
@@ -93,7 +87,8 @@ default_model = "openai/text-embedding-3-large"
 [[columns]]
 id = "kev"
 title = "Kev"
-kind = "kev"
-models = ["Kev-4B", "Kev-0.8B"]
-default_model = "Kev-4B"
+kind = "decisions"
+modality = "decisions"
+prefix = "jaredpalmer/"
+default_model = "jaredpalmer/kev-4b"
 slot = "embeddings"

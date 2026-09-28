@@ -19,12 +19,10 @@ def test_catalog_lists_columns_with_models_and_prices(make_app: AppFactory) -> N
     embeddings = by_id["embeddings"]
     assert (embeddings["embedding_temperature"], embeddings["emails_per_request"]) == (0.05, 2)
     assert by_id["jev"]["embedding_temperature"] is None
-    kev = by_id["kev"]
-    assert [model["id"] for model in kev["models"]] == ["Kev-4B", "Kev-0.8B"]
-    assert (kev["models"][0]["prompt_price_per_m"], kev["error"]) == (0.0, None)
-    assert (kev["slot"], kev["calibrated"]) == ("embeddings", True)
+    assert [model["id"] for model in by_id["jev"]["models"]] == ["typesafe/jev-1.13"]
+    assert [model["id"] for model in by_id["kev"]["models"]] == ["jaredpalmer/kev-4b"]
+    assert (by_id["kev"]["kind"], by_id["kev"]["slot"]) == ("decisions", "embeddings")
     assert (by_id["embeddings"]["slot"], by_id["jev"]["slot"]) == ("embeddings", "jev")
-    assert by_id["jev"]["calibrated"] is None
 
 
 def test_catalog_outage_keeps_the_default_model(make_app: AppFactory) -> None:
@@ -33,7 +31,6 @@ def test_catalog_outage_keeps_the_default_model(make_app: AppFactory) -> None:
     assert "503" in jev["error"]
     assert [model["id"] for model in jev["models"]] == ["typesafe/jev-1.13"]
     assert jev["models"][0]["name"] == "typesafe/jev-1.13 (default)"
-    assert columns[-1]["error"] is None
 
 
 def test_catalog_with_invalid_config_returns_400(tmp_path: Path, make_app: AppFactory) -> None:

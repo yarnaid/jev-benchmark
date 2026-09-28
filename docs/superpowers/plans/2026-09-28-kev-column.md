@@ -2,6 +2,10 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **Superseded in part (2026-09-28):** Kev now runs through OpenRouter's Decisions API. See the revision note
+> at the top of the spec. Tasks 1–5, 6 and 8 were reverted; only the card slot, the colors and "Latest" over
+> visible columns (Task 7) remain.
+
 **Goal:** Add Kev (`jaredpalmer/kev-4b` / `-0.8b` on its public Hugging Face Space) as an optional benchmark
 column that shares one Benchmark card slot with Embeddings.
 

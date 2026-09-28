@@ -6,6 +6,39 @@ Adds [Kev](https://huggingface.co/spaces/jaredpalmer/kev) as an optional benchma
 out, from one forward pass. It is reached through its public Hugging Face Space. On the Benchmark page it
 shares one card slot with Embeddings, so the row keeps four cards.
 
+## Revision (2026-09-28, same day): Kev goes through OpenRouter
+
+OpenRouter serves `jaredpalmer/kev-4b` as a Decisions model on `/alpha/decisions`: the same endpoint and
+payload as Jev, $0.042/M input, 8,192-token context. The user switched Kev to it, which supersedes the
+Space transport below. Of this spec, only the card slot (§5), the colors and "Latest" over visible columns
+remain.
+
+Removed:
+- the `kev` kind, `[kev]` / `KevParams` and the fixed model list;
+- `kev_space.py`, `classifiers/kev.py` and the preflight;
+- the HF token (setting, `X-HF-Token`, key-dialog field, status);
+- the quota line and the free estimate;
+- `with_retries`.
+
+The Kev column is now a `decisions` column:
+- `prefix = "jaredpalmer/"`, `default_model = "jaredpalmer/kev-4b"`, `slot = "embeddings"`;
+- it runs through `JevClassifier` with the OpenRouter key.
+
+The Jev column gets `prefix = "typesafe/"`, so its picker no longer offers Kev (or Respan's Span-01).
+
+The "×Jev" baseline in the summary table is now the `jev` column's run, not the first `decisions` run.
+Otherwise a comparison without a Jev run would be measured against Kev.
+
+Trade-offs accepted:
+- OpenRouter exposes no calibration switch, so the benchmark gets whatever OpenRouter serves;
+- Kev-0.8B is not offered;
+- Kev is paid (about Jev's cost) instead of drawing on the free GPU quota.
+
+The shipped 18-question payload fits the 8,192-token window: about 2.5k estimated tokens, plus a 1k output
+reserve, against at most 1.9k for the largest existing email.
+
+The sections below are the original design, kept for the record.
+
 ## 1. Decisions
 
 | Topic | Decision |

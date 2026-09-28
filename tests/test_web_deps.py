@@ -6,14 +6,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from tests.factories import ServicesFactory
 
-from jev_bench.web.deps import (
-    HF_FORMAT_DETAIL,
-    NO_KEY_DETAIL,
-    ApiKeyDep,
-    HfTokenDep,
-    OptionalApiKeyDep,
-    split_ids,
-)
+from jev_bench.web.deps import NO_KEY_DETAIL, ApiKeyDep, split_ids
 
 
 def _unused(request: httpx2.Request) -> httpx2.Response:
@@ -49,58 +42,6 @@ async def test_require_api_key(
     assert response.status_code == status
     body = response.json()
     assert (body.get("key") or body.get("detail")) == expected
-
-
-@pytest.mark.parametrize(
-    ("server", "headers", "expected"),
-    [
-        pytest.param({}, {}, {"key": None, "hf": None}, id="nothing"),
-        pytest.param(
-            {"api_key": "sk-server", "hf_token": "hf_server"},
-            {},
-            {"key": "sk-server", "hf": "hf_server"},
-            id="server-secrets",
-        ),
-        pytest.param(
-            {"hf_token": "hf_server"},
-            {"X-HF-Token": "hf_browser"},
-            {"key": None, "hf": "hf_browser"},
-            id="browser-token-overrides",
-        ),
-        pytest.param(
-            {"hf_token": "hf_server"},
-            {"X-HF-Token": "   "},
-            {"key": None, "hf": "hf_server"},
-            id="blank-header-falls-back",
-        ),
-        pytest.param(
-            {},
-            {"X-HF-Token": "sk-or-v1-pasted-into-the-wrong-field"},
-            {"detail": HF_FORMAT_DETAIL},
-            id="openrouter-key-in-the-hf-header-is-refused",
-        ),
-        pytest.param(
-            {"hf_token": "not-a-token"},
-            {},
-            {"detail": HF_FORMAT_DETAIL},
-            id="malformed-server-token-is-refused",
-        ),
-    ],
-)
-async def test_optional_secrets(
-    make_services: ServicesFactory,
-    server: dict[str, str],
-    headers: dict[str, str],
-    expected: dict[str, str | None],
-) -> None:
-    app = FastAPI()
-    app.state.services = make_services(_unused, **server)
-
-    @app.get("/secrets")
-    def secrets(key: OptionalApiKeyDep, hf: HfTokenDep) -> dict[str, str | None]:
-        return {"key": key, "hf": hf}
-
-    assert TestClient(app).get("/secrets", headers=headers).json() == expected
 
 
 @pytest.mark.parametrize(

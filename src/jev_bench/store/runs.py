@@ -21,7 +21,6 @@ from jev_bench.benchmark_config import (
     ColumnKind,
     EmbeddingParams,
     JevParams,
-    KevParams,
     LlmParams,
 )
 from jev_bench.ids import is_safe_id
@@ -46,9 +45,7 @@ PREDICTIONS_FILE = "predictions.jsonl"
 RESPONSES_FILE = "responses.jsonl"
 
 type RunMode = Literal["per_email", "all_in_one", "batched"]
-RunParams = Annotated[
-    JevParams | LlmParams | EmbeddingParams | KevParams, Field(discriminator="kind")
-]
+RunParams = Annotated[JevParams | LlmParams | EmbeddingParams, Field(discriminator="kind")]
 
 
 class RunMeta(BaseModel):

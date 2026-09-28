@@ -165,41 +165,28 @@ async def test_find(make_client: ClientFactory) -> None:
 
 
 @pytest.mark.parametrize(
-    ("column", "expected", "calls"),
+    ("column", "expected"),
     [
         pytest.param(
             _column(kind="chat", modality="text", prefix="anthropic/"),
             ["anthropic/claude-sonnet-5"],
-            1,
             id="chat",
         ),
         pytest.param(
             _column(kind="embeddings", modality="embeddings"),
             ["openai/text-embedding-3-large"],
-            1,
             id="embeddings",
         ),
         pytest.param(
             _column(kind="decisions", modality="decisions"),
             ["typesafe/jev-1.13"],
-            1,
             id="decisions",
-        ),
-        pytest.param(
-            _column(kind="kev", models=["Kev-4B", "Kev-0.8B"], default_model="Kev-4B"),
-            ["Kev-4B", "Kev-0.8B"],
-            0,
-            id="kev-static-models-without-a-request",
         ),
     ],
 )
 async def test_for_column(
-    make_client: ClientFactory, column: ColumnConfig, expected: list[str], calls: int
+    make_client: ClientFactory, column: ColumnConfig, expected: list[str]
 ) -> None:
-    requests: list[httpx2.Request] = []
-    catalog = Catalog(make_client(_catalog_handler(requests)))
-    result = await catalog.for_column(column)
-    assert [m.id for m in result] == expected
-    assert len(requests) == calls
-    if column.kind == "kev":
-        assert result == [ModelInfo(id=model, name=model) for model in expected]
+    catalog = Catalog(make_client(_catalog_handler([])))
+    result = [m.id for m in await catalog.for_column(column)]
+    assert result == expected
