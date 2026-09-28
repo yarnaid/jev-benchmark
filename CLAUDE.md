@@ -31,6 +31,7 @@ uv run pytest                             # default suite (no network; integrati
 uv run pytest tests/test_compare_report.py -k fleiss -v    # one module / one test
 uv run pytest --cov --cov-fail-under=95   # coverage gate
 uv run pytest -m integration tests/test_integration_openrouter.py   # real, PAID OpenRouter calls
+uv run pytest -m integration tests/test_integration_kev.py   # one real Kev Space call (free, uses GPU quota)
 uv run ruff check --fix && uv run ruff format && uv run pyright     # after every change
 node --check src/jev_bench/web/static/js/*.js   # static JS syntax gate (Node, no npm)
 node --test tests/js/                           # JS unit tests (Node's runner, no npm)
