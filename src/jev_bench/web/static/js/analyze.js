@@ -3,6 +3,7 @@
  * instructions (edits are kept per browser), see the estimated cost, start an analysis and follow it live,
  * then read, copy or download the report. Past analyses are listed below. The runs are sent in catalog
  * column order, so the analyst's R1 is Jev. ?analysis=<id> opens an analysis; ?runs=… pins the runs.
+ * "Latest" skips columns hidden in a Benchmark card slot.
  * Exports: none (page entry point).
  */
 import { api } from "./api.js";
@@ -12,6 +13,7 @@ import { clear, h, icon } from "./dom.js";
 import { hideTooltips } from "./glossary.js";
 import { initLayout, startJob, toastError, toastSuccess } from "./layout.js";
 import { defaultRunIds, generationChoices, initialGenerations, orderByColumn, runChoices, runText } from "./selection.js";
+import { hiddenColumnIds, slotPicks } from "./slots.js";
 import { readPref, removePref, writePref } from "./storage.js";
 import { checklist, thresholdSlider } from "./widgets.js";
 
@@ -58,7 +60,7 @@ async function main() {
   await show(params.get("analysis") ?? state.history[0]?.meta.id ?? null);
 }
 
-const defaultRuns = () => defaultRunIds(state.runs, state.selected, state.catalog);
+const defaultRuns = () => defaultRunIds(state.runs, state.selected, state.catalog, hiddenColumnIds(state.catalog, slotPicks(state.catalog, (key) => readPref(key, null))));
 const runLabel = (id) => {
   const run = state.runs.find((item) => item.id === id);
   return run ? runText(run, state.catalog) : id;

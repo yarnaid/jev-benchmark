@@ -128,7 +128,10 @@ node --test tests/js/                           # JS unit tests (Node's runner, 
   build-free UI in `web/static/` (Bootstrap 5.3 + Chart.js from jsDelivr with SRI).
   - Every metric has a (?) tooltip. The texts live once in `js/glossary.js`, which the Help page
     (`help.html`) also renders; a node test checks that every `withHelp`/`helpIcon` key exists.
-  - Rater colors come from `js/palette.js` (validated categorical order, light and dark steps).
+  - Rater colors come from `js/palette.js` (validated categorical order, light and dark steps; Kev has the
+    former green spare).
+  - Columns sharing a `slot` (Kev and Embeddings) share one Benchmark card with a header toggle
+    (`js/slots.js`, pure). "Latest" on Benchmark and Analyze compares visible columns only.
   - Analysis reports render through `js/markdown.js` (pure parser) and `js/markdown-render.js` (`h()`
     nodes, never HTML). An `e001` ref links to `explorer.html?…&email=<id>`.
 - **CLI**: `cli.py` (typer, lazy imports) delegates to `cli_jobs.py`, which uses the same launchers and

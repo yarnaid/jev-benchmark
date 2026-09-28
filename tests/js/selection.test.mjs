@@ -73,3 +73,10 @@ test("generationChoices and runChoices describe the checklist items", () => {
   assert.deepEqual(choices.map((choice) => [choice.value, choice.text]), [["r1", "Anthropic · claude-sonnet-5 · all in one"], ["r2", "retired · y"]]);
   assert.match(choices[0].hint, / · 4 emails$/);
 });
+
+test("defaultRunIds skips hidden columns but keeps runs of retired columns", () => {
+  const runs = [run("20260925-090000-kev-a", "kev"), run("20260925-080000-embeddings-a", "embeddings"), run("20260925-070000-retired-a", "retired")];
+  const catalog = [...CATALOG, { id: "embeddings" }, { id: "kev" }];
+  assert.deepEqual(defaultRunIds(runs, ["g1"], catalog, new Set(["embeddings"])), ["20260925-090000-kev-a", "20260925-070000-retired-a"]);
+  assert.deepEqual(defaultRunIds(runs, ["g1"], catalog), ["20260925-080000-embeddings-a", "20260925-090000-kev-a", "20260925-070000-retired-a"]);
+});

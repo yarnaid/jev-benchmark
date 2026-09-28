@@ -1,7 +1,8 @@
 /**
  * Pure run-selection helpers shared by the Benchmark and Analyze pages: set equality of generation ids,
  * the initial generations (pinned by a requested run, else the stored choice, else the newest), the
- * default runs (the latest completed run per column, in catalog column order), and the checklist items
+ * default runs (the latest completed run per column not hidden in a card slot, in catalog column order),
+ * and the checklist items
  * of the generation and run pickers.
  * Exports: sameSet, latestCompletedPerColumn, orderByColumn, defaultRunIds, initialGenerations,
  * generationChoices, runChoices, runText.
@@ -29,7 +30,10 @@ export function orderByColumn(runIds, runs, catalog) {
   return [...runIds].sort((a, b) => rank(a) - rank(b));
 }
 
-export const defaultRunIds = (runs, generationIds, catalog) => orderByColumn(latestCompletedPerColumn(runs, generationIds), runs, catalog);
+export function defaultRunIds(runs, generationIds, catalog, hidden = new Set()) {
+  const shown = runs.filter((run) => !hidden.has(run.column));
+  return orderByColumn(latestCompletedPerColumn(shown, generationIds), runs, catalog);
+}
 
 export function initialGenerations(generations, runs, requested, stored) {
   const pinned = runs.find((run) => requested.includes(run.id));

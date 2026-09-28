@@ -12,6 +12,7 @@
   --jb-col-anthropic: #eb6834;
   --jb-col-openai: #2a78d6;
   --jb-col-embeddings: #e87ba4;
+  --jb-col-kev: #008300;
   --jb-col-reference: #eda100;
   --jb-col-human: #4a3aa7;
 }
@@ -38,6 +39,7 @@
   --jb-col-anthropic: #d95926;
   --jb-col-openai: #3987e5;
   --jb-col-embeddings: #d55181;
+  --jb-col-kev: #008300;
   --jb-col-reference: #c98500;
   --jb-col-human: #9085e9;
 }
@@ -86,6 +88,7 @@ body {
 .accent-anthropic { --jb-accent: var(--jb-col-anthropic); }
 .accent-openai { --jb-accent: var(--jb-col-openai); }
 .accent-embeddings { --jb-accent: var(--jb-col-embeddings); }
+.accent-kev { --jb-accent: var(--jb-col-kev); }
 
 .column-card {
   border-top: 3px solid var(--jb-accent, var(--jb-brand));

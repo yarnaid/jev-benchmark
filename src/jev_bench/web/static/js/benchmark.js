@@ -6,6 +6,8 @@
  * opening ?runs=…) pins a choice, and "Latest" returns to the default. A label-threshold slider appears in
  * the page header when the report has a multi-label question; it is rendered once and re-fetches the
  * comparison with ?threshold=. The report is redrawn with the other theme's colors when the theme changes.
+ * Columns sharing a slot share one card with a toggle; the choice is stored per slot and "Latest" compares
+ * the visible columns only (a hidden column's runs stay pickable).
  * Exports: none (page entry point).
  */
 import { api } from "./api.js";
@@ -13,9 +15,11 @@ import { columnCard, estimateBlock, statsBlock } from "./column-card.js";
 import { clear, h, icon } from "./dom.js";
 import { initLayout, startJob, THEME_EVENT, toastError } from "./layout.js";
 import { hideTooltips } from "./glossary.js";
+import { getHfToken, KEY_EVENT } from "./key.js";
 import { cardQuality, qualityBlock } from "./quality.js";
 import { renderReport } from "./report.js";
 import { defaultRunIds, generationChoices, initialGenerations, orderByColumn, runChoices, sameSet } from "./selection.js";
+import { hiddenColumnIds, slotPicks, slotPrefKey, slotView, visibleColumns } from "./slots.js";
 import { readPref, writePref } from "./storage.js";
 import { checklist, emptyState, thresholdSlider } from "./widgets.js";
 
@@ -34,6 +38,7 @@ const state = {
   threshold: readPref("threshold", null),
   sliderShown: false,
   report: null,
+  serverHfToken: false,
 };
 
 const selectedSet = () => new Set(state.selected);
@@ -43,8 +48,9 @@ const modeOf = (column) => readPref(`benchmark.mode.${column.id}`, "per_email");
 async function main() {
   await initLayout();
   const requested = (new URLSearchParams(location.search).get("runs") ?? "").split(",").filter(Boolean);
-  const [catalog, generations, runs] = await Promise.all([api.catalog(), api.generations(), api.runs()]);
+  const [catalog, generations, runs, status] = await Promise.all([api.catalog(), api.generations(), api.runs(), api.status()]);
   state.catalog = catalog;
+  state.serverHfToken = status.server_hf_token;
   state.generations = generations.map((view) => view.meta).filter((meta) => meta.done > 0);
   state.runs = runs.map((view) => view.meta);
   state.selected = initialGenerations(state.generations, state.runs, requested, readPref("benchmark.generations", []));
@@ -52,12 +58,16 @@ async function main() {
   state.chosen = state.explicit ? requested : defaultRuns();
   renderPickers();
   renderColumns();
+  window.addEventListener(KEY_EVENT, renderColumns);
   trackRunning();
   window.addEventListener(THEME_EVENT, redrawReport);
   await refreshComparison();
 }
 
-const defaultRuns = () => defaultRunIds(state.runs, state.selected, state.catalog);
+const picks = () => slotPicks(state.catalog, (key) => readPref(key, null));
+const shownColumns = () => visibleColumns(state.catalog, picks());
+const defaultRuns = () => defaultRunIds(state.runs, state.selected, state.catalog, hiddenColumnIds(state.catalog, picks()));
+const quotaSource = () => (getHfToken() ? "your token" : state.serverHfToken ? "server token" : "anonymous (2 min/day)");
 
 function renderPickers() {
   const generations = checklist({ label: "Generations", items: generationChoices(state.generations), selected: state.selected, onChange: onGenerations });
@@ -74,7 +84,7 @@ function onGenerations(selected) {
   state.selected = selected;
   writePref("benchmark.generations", selected);
   resetRuns();
-  for (const column of state.catalog) {
+  for (const column of shownColumns()) {
     refreshStats(column.id);
     scheduleEstimate(column);
   }
@@ -107,11 +117,14 @@ function renderColumns() {
     container.append(emptyState("No columns are configured in config/benchmark.toml."));
     return;
   }
-  for (const column of state.catalog) {
+  for (const { slot, columns, shown: column } of slotView(state.catalog, picks())) {
     const handlers = {
       model: modelOf(column),
       mode: modeOf(column),
       running: currentRun(column.id)?.status === "running",
+      siblings: columns,
+      quota: quotaSource(),
+      onSwap: (id) => swapSlot(slot, id),
       onModel: (value) => savePref(column, "model", value),
       onMode: (value) => savePref(column, "mode", value),
       onRun: (model) => launch(column, model),
@@ -121,6 +134,12 @@ function renderColumns() {
     refreshStats(column.id);
     scheduleEstimate(column, 0);
   }
+}
+
+function swapSlot(slot, columnId) {
+  writePref(slotPrefKey(slot), columnId);
+  renderColumns();
+  if (!state.explicit) resetRuns();
 }
 
 function savePref(column, name, value) {
@@ -143,7 +162,7 @@ function scheduleEstimate(column, delay = ESTIMATE_DELAY_MS) {
 async function refreshEstimate(column, token) {
   const show = (estimate) => {
     const target = document.getElementById(`estimate-${column.id}`);
-    if (target && state.estimates.get(column.id) === token) replaceContent(target, estimateBlock(estimate));
+    if (target && state.estimates.get(column.id) === token) replaceContent(target, estimateBlock(estimate, column));
   };
   if (!state.selected.length) return show(null);
   show(await api.estimateRun(requestBody(column, modelOf(column))).catch((error) => error));
@@ -226,7 +245,7 @@ async function poll(runId) {
 }
 
 function runFinished(meta) {
-  const column = state.catalog.find((item) => item.id === meta.column);
+  const column = shownColumns().find((item) => item.id === meta.column);
   if (column) scheduleEstimate(column);
   if (state.explicit) return renderRunPicker();
   resetRuns();
