@@ -16,6 +16,7 @@ Functions:
     build_http_client: shared client configured from Settings.
     chat_content: assistant text of a chat completion (code fences stripped).
     json_schema_format: strict `response_format` payload for a JSON schema.
+    with_retries: run an async attempt, retrying a retryable OpenRouterError with jittered backoff.
 """
 
 import asyncio
@@ -44,6 +45,7 @@ __all__ = [
     "build_http_client",
     "chat_content",
     "json_schema_format",
+    "with_retries",
 ]
 
 type JsonObject = dict[str, Any]
@@ -92,6 +94,20 @@ def build_http_client(settings: Settings) -> httpx2.AsyncClient:
     )
 
 
+async def with_retries[T](
+    attempt: Callable[[], Awaitable[T]], *, max_retries: int, base_delay_s: float
+) -> T:
+    for number in range(max_retries + 1):
+        try:
+            return await attempt()
+        except OpenRouterError as exc:
+            if not exc.retryable or number == max_retries:
+                raise
+            logger.bind(attempt=number + 1).debug("retrying request: {}", exc)
+        await asyncio.sleep(base_delay_s * 2**number * random.uniform(0.5, 1.5))
+    raise AssertionError("unreachable")
+
+
 class OpenRouterClient:
     def __init__(
         self, http: httpx2.AsyncClient, *, max_retries: int, retry_base_delay_s: float
@@ -124,15 +140,9 @@ class OpenRouterClient:
         return await self._retrying(lambda: self._stream_once(path, payload, api_key, on_text))
 
     async def _retrying(self, attempt: Callable[[], Awaitable[ApiResponse]]) -> ApiResponse:
-        for number in range(self._max_retries + 1):
-            try:
-                return await attempt()
-            except OpenRouterError as exc:
-                if not exc.retryable or number == self._max_retries:
-                    raise
-                logger.bind(attempt=number + 1).debug("retrying OpenRouter call: {}", exc)
-            await asyncio.sleep(self._base_delay * 2**number * random.uniform(0.5, 1.5))
-        raise AssertionError("unreachable")
+        return await with_retries(
+            attempt, max_retries=self._max_retries, base_delay_s=self._base_delay
+        )
 
     async def _send(
         self, path: str, request: Callable[[], Awaitable[httpx2.Response]]

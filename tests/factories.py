@@ -12,6 +12,8 @@ Functions:
     write_mini_config: write a mini questions/benchmark/generation TOML config to a directory.
     mini_settings: isolated Settings over a mini config, reading no env or `.env`.
     generator_output: JSON text of one generator response.
+    space_events: Gradio server-sent events body.
+    space_info: Kev Space /gradio_api/info body serving the given models.
     seed_generation: save a completed GenerationMeta plus its emails to services.generations.
     services_of: typed access to a TestClient's app.state.services.
     poll: GET a path repeatedly until a predicate on its JSON body holds, or fail.
@@ -23,6 +25,7 @@ Constants:
     CHAT_PARAMETERS: the fake catalog's supported_parameters for chat models (like the real
         Claude Sonnet 5 / GPT-5.6 Terra entries: no `temperature`).
     ANALYSIS_PARTS: the fake analyst's streamed Markdown.
+    KEV_RESPONSE: a Kev /v1/systemone response (Jev's answers, no cost).
 Types:
     ClientFactory: type of the make_client fixture.
     ServicesFactory: type of the make_services fixture.
@@ -309,6 +312,12 @@ JEV_ANSWERS: dict[str, Any] = {
         "probabilities": {"billing": 0.7, "meeting": 0.2, "travel": 0.1},
     },
 }
+KEV_RESPONSE: dict[str, Any] = {
+    "model": "jaredpalmer/kev-4b",
+    "answers": JEV_ANSWERS,
+    "usage": {"input_tokens": 71, "output_tokens": 185},
+    "latency_ms": 117.0,
+}
 CHAT_PARAMETERS = ("max_tokens", "reasoning", "response_format", "structured_outputs")
 ANALYSIS_PARTS = ("## Executive summary\n", "- Jev agrees with the reference.\n")
 _CATALOG: dict[str, list[dict[str, Any]]] = {
@@ -345,6 +354,20 @@ _CATALOG: dict[str, list[dict[str, Any]]] = {
         }
     ],
 }
+
+
+def space_events(*events: tuple[str, object]) -> bytes:
+    return "".join(f"event: {name}\ndata: {json.dumps(data)}\n\n" for name, data in events).encode()
+
+
+def space_info(models: Sequence[str]) -> dict[str, Any]:
+    choice = {
+        "parameter_name": "model_choice",
+        "type": {"enum": [*models, "Both"], "type": "string"},
+    }
+    return {
+        "named_endpoints": {"/decide": {"parameters": [{"parameter_name": "state_text"}, choice]}}
+    }
 
 
 def _vector(text: str) -> list[float]:
