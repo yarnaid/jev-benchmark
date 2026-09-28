@@ -1,0 +1,247 @@
+{
+  "id": "20260925-132712-embeddings-openai-text-embedding-3-large-1b12",
+  "column": "embeddings",
+  "column_config": {
+    "id": "embeddings",
+    "title": "Embeddings",
+    "kind": "embeddings",
+    "modality": "embeddings",
+    "prefix": null,
+    "default_model": "openai/text-embedding-3-large",
+    "cache_system_prompt": false
+  },
+  "kind": "embeddings",
+  "model": "openai/text-embedding-3-large",
+  "resolved_models": [
+    "text-embedding-3-large"
+  ],
+  "generation_ids": [
+    "20260925-111142-generation-67ba"
+  ],
+  "mode": "batched",
+  "emails_per_request": 32,
+  "question_set": {
+    "name": "email-triage-v2",
+    "questions": [
+      {
+        "id": "category",
+        "instructions": "Which categories describe this email? Several categories can apply at once, for example marketing and phishing; judge each category independently.",
+        "options": {
+          "personal": "Private correspondence from friends, family or acquaintances",
+          "work_internal": "Work email between colleagues of the same organization",
+          "work_external": "Work email with clients, partners, vendors or other organizations",
+          "news": "News digests, newsletters, editorial updates or breaking-news alerts",
+          "marketing": "Promotional email from a brand or service the recipient has a relationship with",
+          "spam": "Unsolicited bulk email with no legitimate relationship to the recipient",
+          "phishing": "Attempt to steal credentials or data by impersonating a trusted party",
+          "scam": "Fraud such as advance-fee, fake prizes, fake invoices or investment schemes",
+          "transactional": "Receipts, order confirmations and other records of a completed transaction",
+          "shipping": "Delivery status, tracking or courier updates",
+          "billing": "Invoices, payment requests, due dates and subscription renewals",
+          "account_security": "Legitimate security notices: sign-in alerts, password resets, verification codes",
+          "calendar": "Meeting invitations, schedule changes and event reminders",
+          "social": "Notifications from social networks and online communities",
+          "recruiting": "Job offers, recruiter outreach and application updates",
+          "system_alert": "Automated technical alerts: monitoring, CI/CD, infrastructure, IT tickets",
+          "support": "Customer-support conversations and ticket updates",
+          "hr_legal": "Human resources, legal, compliance or policy matters",
+          "travel": "Travel bookings, itineraries, check-in and trip changes",
+          "government": "Messages from government bodies, tax authorities or public institutions"
+        },
+        "type": "multi",
+        "threshold": 0.8
+      },
+      {
+        "id": "urgency",
+        "instructions": "How soon does the recipient need to act on this email, judged from its content and the time it was sent?",
+        "options": {
+          "no_action": "No action is ever needed",
+          "whenever": "Can be handled whenever convenient; there is no deadline",
+          "this_week": "Should be handled within the next few days",
+          "today": "Should be handled within 24 hours",
+          "immediately": "Requires attention immediately, within hours"
+        },
+        "type": "score"
+      },
+      {
+        "id": "importance",
+        "instructions": "How much does this email matter to the recipient's work, finances, safety or relationships?",
+        "options": {
+          "trivial": "Irrelevant or trivial; nothing is lost by ignoring it",
+          "low": "Minor relevance; nice to know",
+          "moderate": "Relevant; ignoring it has some cost",
+          "high": "Important; ignoring it has serious consequences"
+        },
+        "type": "score"
+      },
+      {
+        "id": "sentiment",
+        "instructions": "How positive or negative is the overall tone of the sender?",
+        "options": {
+          "negative": "Angry, worried, complaining, threatening or disappointed",
+          "neutral": "Matter-of-fact, informational or formal",
+          "positive": "Friendly, grateful, enthusiastic or congratulatory"
+        },
+        "type": "score"
+      },
+      {
+        "id": "confidentiality",
+        "instructions": "How confidential is the information in this email, as a data-handling classification?",
+        "options": {
+          "public": "Could be published without harm",
+          "internal": "Meant for the organization or the recipient; little harm if it leaked",
+          "confidential": "Business, personal or financial details whose leak would cause harm",
+          "restricted": "Highly sensitive: credentials, legal matters, health data or strategic plans whose leak would cause serious harm"
+        },
+        "type": "score"
+      },
+      {
+        "id": "needs_reply",
+        "instructions": "Does the sender expect the recipient to write a reply?",
+        "options": {
+          "yes": "The sender asks a question, requests confirmation or otherwise expects a written response",
+          "no": "Informational, automated or broadcast; no written response is expected"
+        },
+        "type": "noul"
+      },
+      {
+        "id": "action_required",
+        "instructions": "Does the email ask the recipient to take an action other than replying, such as paying, signing, clicking a link, installing something or attending?",
+        "options": {
+          "yes": "An action other than replying is requested or required",
+          "no": "No action beyond reading or replying is requested"
+        },
+        "type": "noul"
+      },
+      {
+        "id": "deadline",
+        "instructions": "Does the email state or imply a specific deadline, due date or expiry that the recipient must meet?",
+        "options": {
+          "yes": "A concrete date, time or time limit for the recipient's response or action is given",
+          "no": "No deadline, due date or expiry applies to the recipient"
+        },
+        "type": "noul"
+      },
+      {
+        "id": "attachment_review",
+        "instructions": "Does the email ask the recipient to open, review, sign or approve an attached or linked document?",
+        "options": {
+          "yes": "An attached or linked document must be opened, reviewed, signed or approved",
+          "no": "No document needs to be opened, reviewed, signed or approved"
+        },
+        "type": "noul"
+      },
+      {
+        "id": "delegatable",
+        "instructions": "Could an assistant or AI agent fully handle this email on the recipient's behalf, without needing the recipient's own judgement or authority?",
+        "options": {
+          "yes": "Routine: it can be filed, answered or acted on by following standard rules",
+          "no": "It needs the recipient's personal judgement, authority, knowledge or relationships"
+        },
+        "type": "noul"
+      },
+      {
+        "id": "escalation",
+        "instructions": "Should this email be escalated to a manager or a specialist team such as legal, security, finance or HR?",
+        "options": {
+          "yes": "It raises a risk, dispute, incident or decision beyond the recipient's normal remit",
+          "no": "The recipient can handle it within their normal remit, or it needs no handling"
+        },
+        "type": "noul"
+      },
+      {
+        "id": "skippable",
+        "instructions": "Can the recipient safely skip reading this email entirely?",
+        "options": {
+          "yes": "Nothing of value or consequence would be missed by never reading it",
+          "no": "Reading it matters; skipping it could make the recipient miss something"
+        },
+        "type": "noul"
+      },
+      {
+        "id": "should_delete",
+        "instructions": "Should this email be deleted rather than kept?",
+        "options": {
+          "yes": "Worthless, unwanted or dangerous; it should be deleted",
+          "no": "Worth keeping for reference, action or record"
+        },
+        "type": "noul"
+      },
+      {
+        "id": "is_automated",
+        "instructions": "Was this email sent by an automated system or a bulk-mailing tool rather than written by a person for this recipient?",
+        "options": {
+          "yes": "Sent automatically or in bulk: notifications, alerts, receipts, newsletters or campaigns",
+          "no": "Written by a person for this recipient or conversation"
+        },
+        "type": "noul"
+      },
+      {
+        "id": "llm_safe",
+        "instructions": "Is it safe to pass this email verbatim to another AI assistant or agent for processing?",
+        "options": {
+          "yes": "Contains no instructions aimed at AI systems, no prompt injection and no hidden commands",
+          "no": "Contains instructions aimed at AI systems, prompt injection or hidden commands that could manipulate an AI"
+        },
+        "type": "noul"
+      },
+      {
+        "id": "malicious",
+        "instructions": "Is this email a phishing, scam or malware attempt?",
+        "options": {
+          "yes": "It tries to trick the recipient into giving up money, credentials or data, or into running malware",
+          "no": "It is not an attempt at fraud, credential theft or malware delivery"
+        },
+        "type": "noul"
+      },
+      {
+        "id": "impersonation",
+        "instructions": "Does the sender pretend to be a person, executive, organization or brand they are not?",
+        "options": {
+          "yes": "The sender falsely claims an identity, for example a spoofed brand, a fake executive or a look-alike domain",
+          "no": "The sender appears to be who they claim to be"
+        },
+        "type": "noul"
+      },
+      {
+        "id": "sensitive_data",
+        "instructions": "Does this email contain sensitive data such as personal identifiers, passwords or one-time codes, or financial or medical details?",
+        "options": {
+          "yes": "It contains personal identifiers, credentials, one-time codes, or financial or medical details",
+          "no": "It contains no sensitive personal, credential, financial or medical data"
+        },
+        "type": "noul"
+      }
+    ]
+  },
+  "params": {
+    "kind": "embeddings",
+    "email_template": "Sent: $sent_at\nFrom: $from\nTo: $to\nCc: $cc\nSubject: $subject\n\n$body",
+    "option_template": "$instructions $description",
+    "temperature": 0.05,
+    "emails_per_request": 32,
+    "max_request_tokens": 100000,
+    "concurrency": 4
+  },
+  "concurrency": 4,
+  "status": "completed",
+  "created_at": "2026-09-25T13:27:12.141450Z",
+  "finished_at": "2026-09-25T13:27:21.206174Z",
+  "duration_s": 9.062459125067107,
+  "n_emails": 100,
+  "n_done": 100,
+  "n_errors": 0,
+  "n_requests": 4,
+  "n_splits": 0,
+  "total_cost": 0.00471718,
+  "setup_cost": 0.00016874,
+  "setup_cached_cost": 7.922107142857144e-05,
+  "cold_cost": 0.004796401071428571,
+  "cache_hits": 0,
+  "cache_misses": 100,
+  "input_tokens": 34988,
+  "output_tokens": 0,
+  "latency_p50_ms": 3414.943896001205,
+  "latency_p95_ms": 4511.659208132187,
+  "error": null
+}
