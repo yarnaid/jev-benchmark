@@ -1,4 +1,4 @@
-"""Status route: whether the server holds an OpenRouter key.
+"""Status route: whether the server holds an OpenRouter key and an HF token.
 
 Classes:
     StatusView
@@ -22,8 +22,13 @@ router = APIRouter(tags=["status"])
 
 class StatusView(BaseModel):
     server_key: bool
+    server_hf_token: bool
 
 
 @router.get("/status")
 def status(services: ServicesDep) -> StatusView:
-    return StatusView(server_key=services.settings.server_api_key() is not None)
+    settings = services.settings
+    return StatusView(
+        server_key=settings.server_api_key() is not None,
+        server_hf_token=settings.server_hf_token() is not None,
+    )

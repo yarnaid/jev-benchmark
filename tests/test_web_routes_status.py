@@ -5,13 +5,20 @@ from tests.factories import AppFactory, FakeOpenRouter
 
 
 @pytest.mark.parametrize(
-    ("api_key", "expected"),
+    ("secrets", "expected"),
     [
-        pytest.param("sk-server", True, id="server-key"),
-        pytest.param(None, False, id="no-key"),
+        pytest.param(
+            {"api_key": "sk-server"},
+            {"server_key": True, "server_hf_token": False},
+            id="server-key",
+        ),
+        pytest.param(
+            {"hf_token": "hf_server"},
+            {"server_key": False, "server_hf_token": True},
+            id="server-hf-token",
+        ),
+        pytest.param({}, {"server_key": False, "server_hf_token": False}, id="nothing"),
     ],
 )
-def test_status(make_app: AppFactory, api_key: str | None, expected: bool) -> None:
-    assert make_app(FakeOpenRouter(), api_key=api_key).get("/api/status").json() == {
-        "server_key": expected
-    }
+def test_status(make_app: AppFactory, secrets: dict[str, str], expected: dict[str, bool]) -> None:
+    assert make_app(FakeOpenRouter(), **secrets).get("/api/status").json() == expected
