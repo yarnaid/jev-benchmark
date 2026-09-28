@@ -2,7 +2,8 @@
 
 Classes:
     ModelInfo: one catalog entry reduced to what the benchmark needs.
-    Catalog: TTL-cached catalog per modality.
+    Catalog: TTL-cached catalog per modality; a column without a modality (kev) lists its
+        static models.
 Functions:
     parse_model: raw catalog entry -> ModelInfo.
     select_models: filter by id prefix (aliases included), drop `:batch` variants,
@@ -110,6 +111,8 @@ class Catalog:
         return next((model for model in await self.models(modality) if model.id == model_id), None)
 
     async def for_column(self, column: ColumnConfig) -> list[ModelInfo]:
+        if column.modality is None:
+            return [ModelInfo(id=model, name=model) for model in column.models]
         models = await self.models(column.modality)
         return select_models(models, prefix=column.prefix, require_structured=column.kind == "chat")
 

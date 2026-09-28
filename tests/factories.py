@@ -186,6 +186,10 @@ option_template = "$option"
 emails_per_request = 2
 concurrency = 2
 
+[kev]
+space_url = "https://kev.test"
+timeout_s = 0.5
+
 [[columns]]
 id = "jev"
 title = "Jev"
@@ -208,6 +212,14 @@ title = "Embeddings"
 kind = "embeddings"
 modality = "embeddings"
 default_model = "openai/text-embedding-3-large"
+
+[[columns]]
+id = "kev"
+title = "Kev"
+kind = "kev"
+models = ["Kev-4B", "Kev-0.8B"]
+default_model = "Kev-4B"
+slot = "embeddings"
 """
 
 MINI_GENERATION_TOML = """

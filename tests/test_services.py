@@ -43,6 +43,7 @@ async def test_configs_are_read_from_the_config_dir(make_services: ServicesFacto
         "jev",
         "anthropic",
         "embeddings",
+        "kev",
     ]
     assert services.generation_config().models == ("gen/a", "gen/b")
     assert services.analysis_config().max_output_tokens == 500
