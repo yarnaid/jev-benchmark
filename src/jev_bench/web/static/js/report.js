@@ -22,7 +22,7 @@ export function renderReport(container, report) {
   const view = { labels, colors };
   const cards = report.questions.map((question) => questionCard(question, view));
   const warnings = report.warnings.map((warning) => h("div", { class: "alert alert-warning py-1 small" }, icon("exclamation-triangle"), ` ${warning}`));
-  clear(container, reportHeader(report), summaryTable(report.raters, labels, colors), warnings, h("div", { class: "row g-3" }, cards.map((card) => card.element)));
+  clear(container, reportHeader(report), summaryTable(report.raters, labels, colors, report.quality), warnings, h("div", { class: "row g-3" }, cards.map((card) => card.element)));
   for (const card of cards) card.draw();
 }
 

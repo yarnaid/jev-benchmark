@@ -1,6 +1,7 @@
 /**
- * One Benchmark column card: model and request-mode pickers, the estimated cost of a run, Run/Cancel,
- * and the live or final statistics of the column's current run. Every statistic carries a (?) tooltip.
+ * One Benchmark column card: the quality of the column's current run (filled by benchmark.js from the
+ * comparison, see quality.js), model and request-mode pickers, the estimated cost of a run, Run/Cancel,
+ * and the live or final statistics of that run. Every statistic carries a (?) tooltip.
  * The card's accent color is its column's chart color (`accent-<column id>` in app.css).
  * Exports: columnCard, statsBlock, estimateBlock.
  */
@@ -15,7 +16,7 @@ export function columnCard(column, { model, mode, onModel, onMode, onRun, onCanc
   const cancel = h("button", { class: "btn btn-outline-danger btn-sm", type: "button", id: `cancel-${column.id}`, disabled: !running, onclick: onCancel }, icon("stop-fill"), " Cancel");
   const warning = column.error ? h("div", { class: "alert alert-warning py-1 px-2 small mb-0" }, icon("exclamation-triangle"), ` Catalog unavailable: ${column.error}`) : null;
   const header = h("div", { class: "card-header d-flex align-items-center gap-2" }, h("span", { class: "series-dot", "aria-hidden": "true" }), h("span", { class: "fw-semibold me-auto" }, column.title), h("span", { class: "badge text-bg-light border" }, column.kind));
-  const body = h("div", { class: "card-body d-flex flex-column gap-2" }, warning, h("div", {}, h("label", { class: "form-label small mb-1" }, "Model"), select, extras(column, mode, onMode)), h("div", { class: "estimate small", id: `estimate-${column.id}` }), h("div", { class: "d-flex gap-2" }, run, cancel), h("div", { id: `stats-${column.id}` }));
+  const body = h("div", { class: "card-body d-flex flex-column gap-2" }, warning, h("div", { class: "quality-slot d-flex flex-column gap-2", id: `quality-${column.id}` }), h("div", {}, h("label", { class: "form-label small mb-1" }, "Model"), select, extras(column, mode, onMode)), h("div", { class: "estimate small", id: `estimate-${column.id}` }), h("div", { class: "d-flex gap-2" }, run, cancel), h("div", { id: `stats-${column.id}` }));
   return h("div", { class: `card h-100 column-card shadow-sm accent-${column.id}` }, header, body);
 }
 

@@ -141,6 +141,37 @@ code,
   font-size: 0.9rem;
 }
 
+.quality-slot:empty {
+  display: none;
+}
+
+.quality-box {
+  border-radius: 0.5rem;
+  padding: 0.45rem 0.7rem;
+}
+
+.quality-box .stat-label {
+  text-transform: none;
+}
+
+.quality-kappa {
+  font-family: var(--jb-mono);
+  font-size: 1.9rem;
+  font-weight: 700;
+  line-height: 1.15;
+}
+
+.quality-secondary .quality-kappa {
+  font-size: 1.2rem;
+}
+
+.quality-band {
+  font-family: var(--jb-font);
+  font-size: 0.85rem;
+  font-weight: 600;
+  margin-left: 0.5rem;
+}
+
 .chart-box {
   position: relative;
   height: 280px;

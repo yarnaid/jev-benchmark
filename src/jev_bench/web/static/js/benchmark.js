@@ -1,6 +1,7 @@
 /**
- * Benchmark page: generation and run pickers, one card per column (column-card.js) with the estimated cost
- * of a run and the live stats of the current one, and the comparison report of the chosen runs. By default
+ * Benchmark page: generation and run pickers, one card per column (column-card.js) with the quality of the
+ * column's current run in the comparison (quality.js), the estimated cost of a run and the live stats of
+ * the current one, and the comparison report of the chosen runs. By default
  * the latest completed run per column on exactly the selected generations is compared; picking runs (or
  * opening ?runs=…) pins a choice, and "Latest" returns to the default. A label-threshold slider appears in
  * the page header when the report has a multi-label question; it is rendered once and re-fetches the
@@ -12,6 +13,7 @@ import { columnCard, estimateBlock, statsBlock } from "./column-card.js";
 import { clear, h, icon } from "./dom.js";
 import { initLayout, startJob, THEME_EVENT, toastError } from "./layout.js";
 import { hideTooltips } from "./glossary.js";
+import { cardQuality, qualityBlock } from "./quality.js";
 import { renderReport } from "./report.js";
 import { defaultRunIds, generationChoices, initialGenerations, orderByColumn, runChoices, sameSet } from "./selection.js";
 import { readPref, writePref } from "./storage.js";
@@ -165,6 +167,16 @@ function refreshStats(columnId) {
   if (target) replaceContent(target, statsBlock(run, live));
   const cancel = document.getElementById(`cancel-${columnId}`);
   if (cancel) cancel.disabled = run?.status !== "running";
+  refreshQuality(columnId, run);
+}
+
+function refreshQuality(columnId, run = currentRun(columnId)) {
+  const target = document.getElementById(`quality-${columnId}`);
+  if (target) replaceContent(target, qualityBlock(cardQuality(run, state.report)));
+}
+
+function refreshAllQuality() {
+  for (const column of state.catalog) refreshQuality(column.id);
 }
 
 async function launch(column, model) {
@@ -235,8 +247,9 @@ async function refreshComparison() {
   const container = document.getElementById("comparison");
   const known = new Set(state.runs.map((run) => run.id));
   const runIds = orderByColumn(state.chosen.filter((id) => known.has(id)), state.runs, state.catalog);
+  state.report = null;
+  refreshAllQuality();
   if (!runIds.length) {
-    state.report = null;
     clear(container, emptyState("Run at least one column on the selected generations, or pick runs, to see the comparison.", "bar-chart"));
     return;
   }
@@ -244,6 +257,7 @@ async function refreshComparison() {
   state.report = await api.compare(runIds, state.threshold);
   renderThreshold(state.report);
   renderReport(container, state.report);
+  refreshAllQuality();
 }
 
 function redrawReport() {

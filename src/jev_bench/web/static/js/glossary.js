@@ -9,6 +9,13 @@ import { h, icon } from "./dom.js";
 
 export const GLOSSARY = [
   {
+    title: "Quality",
+    entries: [
+      ["quality_reference", "κ vs reference", "How closely the run matches the generator's intended answers: κ per question (1 = perfect, 0 = chance), averaged with every question counting equally. Above 0.8 reads as almost perfect, above 0.6 substantial, above 0.4 moderate, above 0.2 fair."],
+      ["quality_human", "κ vs human", "The same score against your own labels from the Explorer, over the questions and emails you labeled. With only a few labels it is a rough guide."],
+    ],
+  },
+  {
     title: "Speed and cost",
     entries: [
       ["status", "Status", "Where the run is: running, completed, cancelled, failed, or interrupted (the server stopped while it ran)."],

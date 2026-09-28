@@ -1,13 +1,14 @@
 /**
  * The top of a comparison report: the heading with an "Explore emails" link, and the raters summary.
- * The summary shows each rater's color, emails, errors, time and cost (both also relative to the Jev run
- * in the comparison: ×1 = Jev), cost per email, cold cost, requests and latency. Every column header has
- * a (?) tooltip.
+ * The summary shows each rater's color, its κ against the reference and human labels when scored
+ * (quality.js), emails, errors, time and cost (both also relative to the Jev run in the comparison:
+ * ×1 = Jev), cost per email, cold cost, requests and latency. Every column header has a (?) tooltip.
  * Exports: raterLabel, reportHeader, summaryTable, swatch, table.
  */
 import { h, icon } from "./dom.js";
 import { duration, fixed, money, num, times } from "./format.js";
 import { withHelp } from "./glossary.js";
+import { qualityCell, qualityTargets, targetHeading } from "./quality.js";
 
 const HEAD = [
   ["Rater"],
@@ -45,15 +46,17 @@ export function table(head, rows, extraClass = "") {
   return h("table", { class: `table table-sm align-middle mb-2 ${extraClass}` }, h("thead", {}, h("tr", {}, cells)), h("tbody", {}, rows));
 }
 
-export function summaryTable(raters, labels, colors) {
+export function summaryTable(raters, labels, colors, quality = []) {
   const jev = raters.find((rater) => rater.run?.kind === "decisions")?.run ?? null;
-  const rows = raters.map((rater) => summaryRow(rater, labels[rater.id], colors.get(rater.id), jev));
-  return h("div", { class: "table-responsive mb-3" }, table(HEAD, rows, "summary-table"));
+  const targets = qualityTargets(quality);
+  const head = [HEAD[0], ...targets.map(targetHeading), ...HEAD.slice(1)];
+  const rows = raters.map((rater) => summaryRow(rater, labels[rater.id], colors.get(rater.id), [...targets.map((target) => qualityCell(quality, rater.id, target)), ...runCells(rater, jev)]));
+  return h("div", { class: "table-responsive mb-3" }, table(head, rows, "summary-table"));
 }
 
-function summaryRow(rater, label, color, jev) {
+function summaryRow(rater, label, color, cells) {
   const name = h("td", { class: "text-nowrap" }, swatch(color), label);
-  return h("tr", {}, name, runCells(rater, jev).map((cell) => h("td", { class: "font-monospace small text-nowrap" }, cell)));
+  return h("tr", {}, name, cells.map((cell) => h("td", { class: "font-monospace small text-nowrap" }, cell)));
 }
 
 function runCells(rater, jev) {

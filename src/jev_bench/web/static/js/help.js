@@ -23,6 +23,7 @@ const SECTIONS = [
   ]],
   ["benchmark", "speedometer2", "Reading the Benchmark page", [
     "Each card is one column: pick the model, and for chat models whether emails are sent one per request or all in one request. The card shows the estimated cost before you start, and live progress, cost and speed while the run is going.",
+    "The large number at the top of a card is the run's quality: its κ against the reference, averaged over all questions, colored from red (chance level) to green (almost perfect), with a second line against your own labels once you have some. The summary table repeats it for every compared run.",
     "Pick which generations to compare and which runs to show. By default the latest completed run of every column is shown. The label threshold slider changes how many categories count as applied; the report recomputes instantly, and nothing is re-run.",
     "The summary table shows each run's time and cost, also relative to Jev (×4 = four times the time or cost of Jev). Each question card shows how often each answer was given, how sure each model was, and how well every pair of raters agrees. Hover over any (?) for an explanation.",
   ]],
