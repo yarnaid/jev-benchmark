@@ -89,6 +89,10 @@ node --test tests/js/                           # JS unit tests (Node's runner, 
   - multi-label questions use `metrics/multilabel.py` via `compare/multi.py`:
     - over the applied label sets: exact-set match, Jaccard, micro-F1, macro κ, macro Fleiss' κ, label counts;
     - over the distributions, as for choice: JSD, entropy, confidence and Brier (against a uniform target);
+  - the headline quality of each run (`compare/quality.py`, `ComparisonReport.quality`): mean κ and mean
+    agreement against the reference and human labels, every question weighing the same, averaged from
+    the pair stats above (a question with undefined κ is left out of both means). The column cards and
+    the summary table show it (`js/quality.js`, Landis–Koch colors);
   - `GET /api/compare` takes its base question set from the **newest** selected run's snapshot, so the URL
     order of `runs=` never changes the report.
 - **Cost estimates**: `run_estimate.py` (`POST /api/runs/estimate`) plans a run exactly like the runner
