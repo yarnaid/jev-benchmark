@@ -39,6 +39,7 @@ PAGE_MODULES = (
     "prompt-editor.js",
     "markdown.js",
     "markdown-render.js",
+    "static-api.js",
 )
 
 

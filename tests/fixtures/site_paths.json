@@ -1,0 +1,33 @@
+{
+  "manifest": {
+    "views": [
+      {"id": "v1", "generation_ids": ["g1"], "run_ids": ["r1", "r2"]},
+      {"id": "v2", "generation_ids": ["g1"], "run_ids": []},
+      {"id": "v3", "generation_ids": ["g2"], "run_ids": []}
+    ]
+  },
+  "published": [
+    {"id": "status", "request": "/status", "base": "/status", "file": "api/status.json"},
+    {"id": "runs-list", "request": "/runs", "base": "/runs", "file": "api/runs.json"},
+    {"id": "run-detail", "request": "/runs/r1", "base": "/runs/r1", "file": "api/runs/r1.json"},
+    {"id": "analysis-prompts", "request": "/analyses/a1/prompts", "base": "/analyses/a1/prompts", "file": "api/analyses/a1/prompts.json"},
+    {"id": "analysis-defaults", "request": "/analysis/defaults", "base": "/analysis/defaults", "file": "api/analysis/defaults.json"},
+    {"id": "compare-default", "request": "/compare?runs=r1%2Cr2", "endpoint": "compare", "view": "v1", "percent": null, "file": "api/compare/v1/t-default.json"},
+    {"id": "compare-any-order", "request": "/compare?runs=r2%2Cr1&threshold=0.85", "endpoint": "compare", "view": "v1", "percent": 85, "file": "api/compare/v1/t85.json"},
+    {"id": "compare-float-noise", "request": "/compare?runs=r1%2Cr2&threshold=0.29", "endpoint": "compare", "view": "v1", "percent": 29, "file": "api/compare/v1/t29.json"},
+    {"id": "emails-with-runs", "request": "/emails?generations=g1&runs=r1%2Cr2&threshold=0.5", "endpoint": "emails", "view": "v1", "percent": 50, "file": "api/emails/v1/t50.json"},
+    {"id": "emails-generation-only", "request": "/emails?generations=g1", "endpoint": "emails", "view": "v2", "percent": null, "file": "api/emails/v2/t-default.json"},
+    {"id": "email-detail", "request": "/emails/g1.0001?runs=r1%2Cr2", "email": "g1.0001", "view": "v1", "file": "api/email/v1/g1.0001.json"},
+    {"id": "email-detail-by-generation", "request": "/emails/g2.0003", "email": "g2.0003", "view": "v3", "file": "api/email/v3/g2.0003.json"}
+  ],
+  "unpublished": [
+    {"id": "run-subset", "method": "GET", "request": "/compare?runs=r1"},
+    {"id": "run-superset", "method": "GET", "request": "/compare?runs=r1%2Cr2%2Cr3"},
+    {"id": "two-generations", "method": "GET", "request": "/emails?generations=g1%2Cg2"},
+    {"id": "filtered-run-list", "method": "GET", "request": "/runs?generations=g1"},
+    {"id": "email-of-unpublished-generation", "method": "GET", "request": "/emails/g9.0001"},
+    {"id": "start-run", "method": "POST", "request": "/runs"},
+    {"id": "estimate", "method": "POST", "request": "/runs/estimate"},
+    {"id": "label", "method": "PUT", "request": "/labels/g1.0001"}
+  ]
+}
