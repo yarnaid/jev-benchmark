@@ -1,5 +1,6 @@
 """Tests for jev_bench.cli."""
 
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -14,7 +15,7 @@ runner = CliRunner()
 def test_help_lists_commands() -> None:
     result = runner.invoke(app, ["--help"])
     assert result.exit_code == 0
-    for command in ("serve", "generate", "run"):
+    for command in ("serve", "generate", "run", "export-site"):
         assert command in result.output
 
 
@@ -127,3 +128,27 @@ def test_configures_logging_before_the_job(
     result = runner.invoke(app, args)
     assert result.exit_code == 0
     assert calls == ["logging", "job"]
+
+
+@pytest.mark.parametrize(
+    ("args", "commit"),
+    [
+        pytest.param([], None, id="without-commit"),
+        pytest.param(["--commit", "abc1234"], "abc1234", id="with-commit"),
+    ],
+)
+def test_export_site_delegates(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, args: list[str], commit: str | None
+) -> None:
+    from jev_bench import cli_export
+
+    seen: list[tuple[Path, str | None]] = []
+
+    async def fake(out: Path, given: str | None) -> int:
+        seen.append((out, given))
+        return 0
+
+    monkeypatch.setattr(cli_export, "export_and_report", fake)
+    result = runner.invoke(app, ["export-site", str(tmp_path / "site"), *args])
+    assert result.exit_code == 0
+    assert seen == [(tmp_path / "site", commit)]

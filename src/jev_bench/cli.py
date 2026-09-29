@@ -1,4 +1,4 @@
-"""Command-line entry point: `serve`, `generate`, `run`.
+"""Command-line entry point: `serve`, `generate`, `run`, `export-site`.
 
 Heavy modules (uvicorn, FastAPI, numpy, httpx2) are imported inside the commands so `--help`
 stays fast.
@@ -9,8 +9,10 @@ Functions:
     serve: start the web UI and API.
     generate: create one generation and wait for it.
     run: run one benchmark column on generations and wait for it.
+    export_site: write the committed results as a static, read-only site.
 """
 
+from pathlib import Path
 from typing import Annotated
 
 import typer
@@ -18,6 +20,7 @@ import typer
 __all__ = [
     "LOOPBACK",
     "app",
+    "export_site",
     "generate",
     "run",
     "serve",
@@ -102,3 +105,20 @@ def run(
 
     configure_logging(write=cli_jobs.write_log)
     raise typer.Exit(asyncio.run(cli_jobs.run_and_wait(column, generations, model, mode)))
+
+
+@app.command()
+def export_site(
+    out: Annotated[Path, typer.Argument(help="Missing or empty directory for the static site.")],
+    commit: Annotated[
+        str | None, typer.Option(help="Commit the snapshot is built from (shown on the site).")
+    ] = None,
+) -> None:
+    """Export the committed results as a static, read-only site (GitHub Pages)."""
+    import asyncio
+
+    from jev_bench import cli_export
+    from jev_bench.log_setup import configure_logging
+
+    configure_logging()
+    raise typer.Exit(asyncio.run(cli_export.export_and_report(out, commit)))
