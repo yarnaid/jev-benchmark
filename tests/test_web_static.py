@@ -13,7 +13,16 @@ from jev_bench.web.app import STATIC_DIR
 FORBIDDEN_SINKS = re.compile(r"\binnerHTML\b|\bouterHTML\b|insertAdjacentHTML|document\.write")
 ROOT_ABSOLUTE = re.compile(r"""["'`]/(?:api\b|[\w-]+\.html)|href:\s*["'`]/["'`]|go\(\s*["'`]/""")
 IMPORT = re.compile(r"""from\s+["'](\./[^"']+)["']""")
-SHELL_MODULES = ("dom.js", "format.js", "storage.js", "key.js", "api.js", "layout.js", "widgets.js")
+SHELL_MODULES = (
+    "dom.js",
+    "format.js",
+    "storage.js",
+    "key.js",
+    "api.js",
+    "layout.js",
+    "widgets.js",
+    "deployment.js",
+)
 PAGE_MODULES = (
     "benchmark.js",
     "report.js",
@@ -40,6 +49,7 @@ PAGE_MODULES = (
     "markdown.js",
     "markdown-render.js",
     "static-api.js",
+    "snapshot.js",
 )
 
 

@@ -1,9 +1,16 @@
 /**
  * JSON client for the /api endpoints; the browser-stored key is attached only to job-starting calls.
  * Query parameters that are undefined, null or "" are omitted (an unset label threshold is never sent).
- * Exports: api, ApiError, needsKey.
+ * In the static snapshot (deployment.js STATIC) every GET is answered by the file static-api.js maps it
+ * to, through the manifest api/site.json (fetched once, revalidated); anything else, and a mapped file
+ * the snapshot lacks, is ApiError(404, NOT_PUBLISHED).
+ * Exports: api, ApiError, needsKey, NOT_PUBLISHED, notPublished, siteManifest, staticRequest.
  */
+import { STATIC } from "./deployment.js";
 import { getKey } from "./key.js";
+import { NotPublished, staticFile } from "./static-api.js";
+
+export const NOT_PUBLISHED = "Not in this snapshot: the published site holds the Latest selections only. Run jev-bench locally to explore any combination.";
 
 export class ApiError extends Error {
   constructor(status, detail) {
@@ -12,17 +19,44 @@ export class ApiError extends Error {
   }
 }
 
-async function request(method, path, { body, withKey = false } = {}) {
-  const headers = { Accept: "application/json" };
-  if (body !== undefined) headers["Content-Type"] = "application/json";
-  const key = withKey ? getKey() : null;
-  if (key) headers["X-OpenRouter-Key"] = key;
-  const response = await fetch(`api${path}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
+async function parse(response) {
   const isJson = (response.headers.get("content-type") ?? "").includes("json");
   const payload = isJson ? await response.json() : await response.text();
   if (!response.ok) throw new ApiError(response.status, payload?.detail ?? payload);
   return payload;
 }
+
+async function request(method, path, { body, withKey = false } = {}) {
+  if (STATIC) return staticRequest(method, path);
+  const headers = { Accept: "application/json" };
+  if (body !== undefined) headers["Content-Type"] = "application/json";
+  const key = withKey ? getKey() : null;
+  if (key) headers["X-OpenRouter-Key"] = key;
+  return parse(await fetch(`api${path}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) }));
+}
+
+let manifest = null;
+
+export function siteManifest() {
+  manifest ??= fetch("api/site.json", { cache: "no-cache", headers: { Accept: "application/json" } }).then(parse);
+  return manifest;
+}
+
+function resolveFile(method, path, site) {
+  try {
+    return staticFile(method, path, site);
+  } catch (error) {
+    throw error instanceof NotPublished ? new ApiError(404, NOT_PUBLISHED) : error;
+  }
+}
+
+export async function staticRequest(method, path) {
+  const response = await fetch(resolveFile(method, path, await siteManifest()), { headers: { Accept: "application/json" } });
+  if (response.status === 404) throw new ApiError(404, NOT_PUBLISHED);
+  return parse(response);
+}
+
+export const notPublished = (error) => error instanceof ApiError && error.message === NOT_PUBLISHED;
 
 function query(params) {
   const entries = Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== "");
