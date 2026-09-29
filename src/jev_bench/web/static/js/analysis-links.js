@@ -8,5 +8,5 @@ export function explorerHref(meta, ref) {
   const refs = meta.email_refs ?? {};
   if (!Object.hasOwn(refs, ref)) return null;
   const query = new URLSearchParams({ generations: meta.generation_ids.join(","), runs: meta.run_ids.join(","), email: refs[ref] });
-  return `/explorer.html?${query}`;
+  return `explorer.html?${query}`;
 }

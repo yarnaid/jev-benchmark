@@ -95,7 +95,7 @@ function render(views) {
 
 function row({ meta, progress }) {
   const live = meta.status === "running" ? progress : null;
-  const actions = [h("a", { class: "btn btn-sm btn-outline-primary", href: `/explorer.html?generations=${encodeURIComponent(meta.id)}` }, icon("search"), " Explore")];
+  const actions = [h("a", { class: "btn btn-sm btn-outline-primary", href: `explorer.html?generations=${encodeURIComponent(meta.id)}` }, icon("search"), " Explore")];
   if (meta.status === "running") actions.push(h("button", { class: "btn btn-sm btn-outline-danger", type: "button", onclick: () => cancel(meta.id) }, icon("stop-fill"), " Cancel"));
   return h(
     "tr",

@@ -17,7 +17,7 @@ async function request(method, path, { body, withKey = false } = {}) {
   if (body !== undefined) headers["Content-Type"] = "application/json";
   const key = withKey ? getKey() : null;
   if (key) headers["X-OpenRouter-Key"] = key;
-  const response = await fetch(`/api${path}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
+  const response = await fetch(`api${path}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
   const isJson = (response.headers.get("content-type") ?? "").includes("json");
   const payload = isJson ? await response.json() : await response.text();
   if (!response.ok) throw new ApiError(response.status, payload?.detail ?? payload);

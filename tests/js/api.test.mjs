@@ -28,3 +28,9 @@ for (const [name, call, expected] of CASES) {
     assert.deepEqual(keys, expected);
   });
 }
+
+test("requests are relative to the page, so the UI works under a sub-path", async () => {
+  sent.length = 0;
+  await api.catalog();
+  assert.equal(sent[0].url, "api/catalog");
+});

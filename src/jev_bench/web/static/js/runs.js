@@ -16,15 +16,15 @@ let epoch = 0;
 
 async function main() {
   await initLayout();
-  document.getElementById("compare").addEventListener("click", () => go("/"));
-  document.getElementById("explore").addEventListener("click", () => go("/explorer.html"));
+  document.getElementById("compare").addEventListener("click", () => go("./"));
+  document.getElementById("explore").addEventListener("click", () => go("explorer.html"));
   await refresh();
 }
 
 function go(page) {
   const chosen = runs.filter((run) => selected.has(run.id));
   const params = new URLSearchParams({ runs: chosen.map((run) => run.id).join(",") });
-  if (page !== "/") params.set("generations", [...new Set(chosen.flatMap((run) => run.generation_ids))].join(","));
+  if (page !== "./") params.set("generations", [...new Set(chosen.flatMap((run) => run.generation_ids))].join(","));
   location.href = `${page}?${params}`;
 }
 

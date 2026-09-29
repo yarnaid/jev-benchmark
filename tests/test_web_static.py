@@ -11,6 +11,7 @@ import pytest
 from jev_bench.web.app import STATIC_DIR
 
 FORBIDDEN_SINKS = re.compile(r"\binnerHTML\b|\bouterHTML\b|insertAdjacentHTML|document\.write")
+ROOT_ABSOLUTE = re.compile(r"""["'`]/(?:api\b|[\w-]+\.html)|href:\s*["'`]/["'`]|go\(\s*["'`]/""")
 IMPORT = re.compile(r"""from\s+["'](\./[^"']+)["']""")
 SHELL_MODULES = ("dom.js", "format.js", "storage.js", "key.js", "api.js", "layout.js", "widgets.js")
 PAGE_MODULES = (
@@ -99,6 +100,15 @@ def test_module_imports_resolve() -> None:
     assert missing == []
 
 
+def test_javascript_uses_relative_urls() -> None:
+    offenders = [
+        f"{path.name}: {match.group(0)}"
+        for path in sorted(STATIC_DIR.glob("js/*.js"))
+        for match in ROOT_ABSOLUTE.finditer(path.read_text(encoding="utf-8"))
+    ]
+    assert offenders == []
+
+
 @pytest.mark.parametrize("page", _pages(), ids=lambda path: path.name)
 def test_pages_follow_the_csp_contract(page: Path) -> None:
     collector = _parse(page)
@@ -112,5 +122,6 @@ def test_pages_follow_the_csp_contract(page: Path) -> None:
             assert re.search(r"@\d+\.\d+\.\d+/", url), f"unpinned CDN asset {url}"
             assert (attrs.get("integrity") or "").startswith("sha384-"), f"missing SRI on {url}"
             assert attrs.get("crossorigin") == "anonymous"
-        if url.startswith("/") and not url.startswith("//"):
-            assert (STATIC_DIR / url.lstrip("/")).exists(), f"missing local asset {url}"
+        if url and "://" not in url and not url.startswith("data:"):
+            assert not url.startswith("/"), f"root-absolute URL {url}"
+            assert (STATIC_DIR / url).exists(), f"missing local asset {url}"

@@ -15,12 +15,12 @@ export const THEME_EVENT = "jev-bench:theme-changed";
 const REPO_URL = "https://github.com/yarnaid/jev-benchmark";
 
 const PAGES = [
-  ["/", "Benchmark", "speedometer2"],
-  ["/generations.html", "Generations", "envelope-paper"],
-  ["/explorer.html", "Explorer", "search"],
-  ["/runs.html", "Runs", "clock-history"],
-  ["/analyze.html", "Analyze", "stars"],
-  ["/help.html", "Help", "question-circle"],
+  ["./", "Benchmark", "speedometer2"],
+  ["generations.html", "Generations", "envelope-paper"],
+  ["explorer.html", "Explorer", "search"],
+  ["runs.html", "Runs", "clock-history"],
+  ["analyze.html", "Analyze", "stars"],
+  ["help.html", "Help", "question-circle"],
 ];
 
 export async function initLayout() {
@@ -33,7 +33,8 @@ export async function initLayout() {
 }
 
 function navbar() {
-  const here = location.pathname === "/index.html" ? "/" : location.pathname;
+  const page = location.pathname.split("/").pop() || "index.html";
+  const here = page === "index.html" ? "./" : page;
   const links = PAGES.map(([href, label, name]) =>
     h("li", { class: "nav-item" }, h("a", { class: `nav-link${href === here ? " active" : ""}`, href }, icon(name), h("span", { class: "nav-label" }, ` ${label}`))),
   );
@@ -45,7 +46,7 @@ function navbar() {
     h(
       "div",
       { class: "container-fluid" },
-      h("a", { class: "navbar-brand fw-semibold", href: "/" }, icon("bar-chart-steps"), " jev-bench"),
+      h("a", { class: "navbar-brand fw-semibold", href: "./" }, icon("bar-chart-steps"), " jev-bench"),
       h("ul", { class: "navbar-nav me-auto flex-wrap" }, links),
       h("div", { class: "d-flex gap-2 align-items-center" }, h("span", { id: "key-badge" }), source, theme),
     ),

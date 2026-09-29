@@ -35,7 +35,7 @@ export function raterLabel(rater) {
 export function reportHeader(report) {
   const runs = report.raters.filter((rater) => rater.run).map((rater) => rater.run);
   const generations = [...new Set(runs.flatMap((run) => run.generation_ids))];
-  const explore = `/explorer.html?${new URLSearchParams({ generations: generations.join(","), runs: runs.map((run) => run.id).join(",") })}`;
+  const explore = `explorer.html?${new URLSearchParams({ generations: generations.join(","), runs: runs.map((run) => run.id).join(",") })}`;
   return h("div", { class: "d-flex flex-wrap align-items-center gap-2 mb-2" }, h("h2", { class: "h5 mb-0 me-auto" }, icon("graph-up"), " Comparison"), h("a", { class: "btn btn-sm btn-outline-primary", href: explore }, icon("search"), " Explore emails"));
 }
 
