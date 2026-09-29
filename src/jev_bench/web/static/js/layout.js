@@ -1,7 +1,7 @@
 /**
- * Shared page chrome: navbar (pages, API-key badge, theme toggle), API-key dialog (with how to get a
- * key), toasts, the delegated Bootstrap tooltips behind every (?) icon, and a job starter that opens the
- * key dialog when the server asks for a key.
+ * Shared page chrome: navbar (pages, API-key badge, GitHub link, theme toggle), API-key dialog (with how
+ * to get a key), toasts, the delegated Bootstrap tooltips behind every (?) icon, and a job starter that
+ * opens the key dialog when the server asks for a key.
  * THEME_EVENT fires on window after the light/dark theme is toggled.
  * Exports: THEME_EVENT, initLayout, keySteps, openKeyModal, toastError, toastSuccess, startJob.
  */
@@ -11,6 +11,8 @@ import { forgetKey, getKey, KEY_EVENT, KEY_STEPS, setKey } from "./key.js";
 import { readPref, writePref } from "./storage.js";
 
 export const THEME_EVENT = "jev-bench:theme-changed";
+
+const REPO_URL = "https://github.com/yarnaid/jev-benchmark";
 
 const PAGES = [
   ["/", "Benchmark", "speedometer2"],
@@ -36,6 +38,7 @@ function navbar() {
     h("li", { class: "nav-item" }, h("a", { class: `nav-link${href === here ? " active" : ""}`, href }, icon(name), h("span", { class: "nav-label" }, ` ${label}`))),
   );
   const theme = h("button", { class: "btn btn-sm btn-outline-secondary", type: "button", title: "Toggle theme", "aria-label": "Toggle theme", onclick: toggleTheme }, icon("circle-half"));
+  const source = h("a", { class: "btn btn-sm btn-outline-secondary", href: REPO_URL, target: "_blank", rel: "noopener noreferrer", title: "Source on GitHub", "aria-label": "Source on GitHub" }, icon("github"));
   return h(
     "nav",
     { class: "navbar navbar-expand jb-nav mb-3", "data-bs-theme": "dark" },
@@ -44,7 +47,7 @@ function navbar() {
       { class: "container-fluid" },
       h("a", { class: "navbar-brand fw-semibold", href: "/" }, icon("bar-chart-steps"), " jev-bench"),
       h("ul", { class: "navbar-nav me-auto flex-wrap" }, links),
-      h("div", { class: "d-flex gap-2 align-items-center" }, h("span", { id: "key-badge" }), theme),
+      h("div", { class: "d-flex gap-2 align-items-center" }, h("span", { id: "key-badge" }), source, theme),
     ),
   );
 }
