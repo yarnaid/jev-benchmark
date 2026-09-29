@@ -1,0 +1,10 @@
+[
+  {"id": "default-80", "default": 0.8, "min": 50, "step": 5},
+  {"id": "one-hundred", "default": 1, "min": 50, "step": 5},
+  {"id": "below-50", "default": 0.4, "min": 40, "step": 5},
+  {"id": "odd-below-50", "default": 0.37, "min": 35, "step": 1},
+  {"id": "odd-above-50", "default": 0.73, "min": 50, "step": 1},
+  {"id": "tiny", "default": 0.01, "min": 1, "step": 1},
+  {"id": "float-noise", "default": 0.29, "min": 25, "step": 1},
+  {"id": "half-rounds-up", "default": 0.125, "min": 10, "step": 1}
+]
