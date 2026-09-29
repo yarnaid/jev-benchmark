@@ -2,9 +2,12 @@
  * JSON client for the /api endpoints; the browser-stored key is attached only to job-starting calls.
  * Query parameters that are undefined, null or "" are omitted (an unset label threshold is never sent).
  * In the static snapshot (deployment.js STATIC) every GET is answered by the file static-api.js maps it
- * to, through the manifest api/site.json (fetched once, revalidated); anything else, and a mapped file
- * the snapshot lacks, is ApiError(404, NOT_PUBLISHED).
- * Exports: api, ApiError, needsKey, NOT_PUBLISHED, notPublished, siteManifest, staticRequest.
+ * to, through the manifest api/site.json (fetched once); every file is revalidated, so one page load
+ * never mixes deploys. Anything else, and a mapped file the snapshot lacks, is ApiError(404,
+ * NOT_PUBLISHED). publishedThreshold retries a load once at the default threshold when a stored one was
+ * never published (the slider range can change between deploys).
+ * Exports: api, ApiError, needsKey, NOT_PUBLISHED, notPublished, publishedThreshold, siteManifest,
+ * staticRequest.
  */
 import { STATIC } from "./deployment.js";
 import { getKey } from "./key.js";
@@ -51,12 +54,21 @@ function resolveFile(method, path, site) {
 }
 
 export async function staticRequest(method, path) {
-  const response = await fetch(resolveFile(method, path, await siteManifest()), { headers: { Accept: "application/json" } });
+  const response = await fetch(resolveFile(method, path, await siteManifest()), { cache: "no-cache", headers: { Accept: "application/json" } });
   if (response.status === 404) throw new ApiError(404, NOT_PUBLISHED);
   return parse(response);
 }
 
 export const notPublished = (error) => error instanceof ApiError && error.message === NOT_PUBLISHED;
+
+export async function publishedThreshold(load, threshold) {
+  try {
+    return { threshold, value: await load(threshold) };
+  } catch (error) {
+    if (threshold === null || threshold === undefined || !notPublished(error)) throw error;
+    return { threshold: null, value: await load(null) };
+  }
+}
 
 function query(params) {
   const entries = Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== "");

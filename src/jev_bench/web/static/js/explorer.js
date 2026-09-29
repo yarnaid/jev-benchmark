@@ -8,7 +8,7 @@
  * Exports: none (page entry point).
  */
 import { answerText, asLabels, setMatch, withScore } from "./answers.js";
-import { api, notPublished } from "./api.js";
+import { api, notPublished, publishedThreshold } from "./api.js";
 import { STATIC } from "./deployment.js";
 import { clear, h, icon } from "./dom.js";
 import { emailDetail } from "./email-detail.js";
@@ -124,7 +124,9 @@ async function refreshRows() {
 
 async function fetchRows(target) {
   try {
-    return await api.emails(state.selectedGenerations, activeRuns(), state.threshold);
+    const loaded = await publishedThreshold((threshold) => api.emails(state.selectedGenerations, activeRuns(), threshold), state.threshold);
+    state.threshold = loaded.threshold;
+    return loaded.value;
   } catch (error) {
     if (!notPublished(error)) throw error;
     clear(document.getElementById("filters"));

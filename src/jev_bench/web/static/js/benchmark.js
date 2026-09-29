@@ -10,7 +10,7 @@
  * the visible columns only (a hidden column's runs stay pickable).
  * Exports: none (page entry point).
  */
-import { api, notPublished } from "./api.js";
+import { api, notPublished, publishedThreshold } from "./api.js";
 import { columnCard, estimateBlock, statsBlock } from "./column-card.js";
 import { STATIC } from "./deployment.js";
 import { clear, h, icon } from "./dom.js";
@@ -270,7 +270,9 @@ async function refreshComparison() {
   }
   clear(container, h("p", { class: "small text-body-secondary" }, "Loading comparison…"));
   try {
-    state.report = await api.compare(runIds, state.threshold);
+    const loaded = await publishedThreshold((threshold) => api.compare(runIds, threshold), state.threshold);
+    state.threshold = loaded.threshold;
+    state.report = loaded.value;
   } catch (error) {
     if (!notPublished(error)) throw error;
     return clear(container, emptyState(error.message, "camera"));
