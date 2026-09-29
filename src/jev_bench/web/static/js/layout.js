@@ -1,13 +1,15 @@
 /**
- * Shared page chrome: navbar (pages, API-key badge, GitHub link, theme toggle), API-key dialog (with how
+ * Shared page chrome: navbar (pages, API-key badge or, in the static snapshot, the snapshot badge, GitHub link, theme toggle), API-key dialog (with how
  * to get a key), toasts, the delegated Bootstrap tooltips behind every (?) icon, and a job starter that
  * opens the key dialog when the server asks for a key.
  * THEME_EVENT fires on window after the light/dark theme is toggled.
  * Exports: THEME_EVENT, initLayout, keySteps, openKeyModal, toastError, toastSuccess, startJob.
  */
-import { api, needsKey } from "./api.js";
+import { api, needsKey, siteManifest } from "./api.js";
+import { STATIC } from "./deployment.js";
 import { clear, h, icon } from "./dom.js";
 import { forgetKey, getKey, KEY_EVENT, KEY_STEPS, setKey } from "./key.js";
+import { snapshotInfo } from "./snapshot.js";
 import { readPref, writePref } from "./storage.js";
 
 export const THEME_EVENT = "jev-bench:theme-changed";
@@ -24,6 +26,7 @@ const PAGES = [
 ];
 
 export async function initLayout() {
+  if (STATIC) document.documentElement.dataset.static = "";
   applyTheme(readPref("theme"));
   const toasts = h("div", { class: "toast-container position-fixed bottom-0 end-0 p-3", id: "toasts" });
   document.body.prepend(navbar(), keyModal(), toasts);
@@ -54,8 +57,16 @@ function navbar() {
 }
 
 async function refreshKeyBadge() {
+  const target = document.getElementById("key-badge");
+  if (STATIC) return clear(target, snapshotBadge(await siteManifest()));
   const serverKey = await api.status().then((status) => status.server_key, () => false);
-  clear(document.getElementById("key-badge"), keyButton(Boolean(getKey()), serverKey));
+  clear(target, keyButton(Boolean(getKey()), serverKey));
+}
+
+function snapshotBadge(manifest) {
+  const { text, href, title } = snapshotInfo(manifest, REPO_URL);
+  const attrs = { class: "btn btn-sm btn-outline-light", title };
+  return href ? h("a", { ...attrs, href, target: "_blank", rel: "noopener noreferrer" }, icon("camera"), ` ${text}`) : h("span", attrs, icon("camera"), ` ${text}`);
 }
 
 function keyButton(stored, serverKey) {

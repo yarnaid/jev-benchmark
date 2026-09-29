@@ -10,8 +10,9 @@
  * the visible columns only (a hidden column's runs stay pickable).
  * Exports: none (page entry point).
  */
-import { api } from "./api.js";
+import { api, notPublished } from "./api.js";
 import { columnCard, estimateBlock, statsBlock } from "./column-card.js";
+import { STATIC } from "./deployment.js";
 import { clear, h, icon } from "./dom.js";
 import { initLayout, startJob, THEME_EVENT, toastError } from "./layout.js";
 import { hideTooltips } from "./glossary.js";
@@ -72,7 +73,7 @@ function renderPickers() {
 
 function renderRunPicker() {
   const latest = h("button", { class: "btn btn-sm btn-outline-secondary", type: "button", id: "latest-runs", title: "Compare the latest completed run of every column", disabled: !state.explicit, onclick: resetRuns }, icon("arrow-counterclockwise"), " Latest");
-  clear(document.getElementById("run-picker"), checklist({ label: "Runs", items: runChoices(state.runs, state.selected, state.catalog), selected: state.chosen, onChange: onRuns }), latest);
+  clear(document.getElementById("run-picker"), checklist({ label: "Runs", items: runChoices(state.runs, state.selected, state.catalog), selected: state.chosen, onChange: onRuns, disabled: STATIC }), latest);
 }
 
 function onGenerations(selected) {
@@ -148,6 +149,7 @@ function requestBody(column, model) {
 }
 
 function scheduleEstimate(column, delay = ESTIMATE_DELAY_MS) {
+  if (STATIC) return;
   clearTimeout(state.estimates.get(column.id)?.timer);
   const token = { timer: setTimeout(() => refreshEstimate(column, token), delay) };
   state.estimates.set(column.id, token);
@@ -267,7 +269,12 @@ async function refreshComparison() {
     return;
   }
   clear(container, h("p", { class: "small text-body-secondary" }, "Loading comparison…"));
-  state.report = await api.compare(runIds, state.threshold);
+  try {
+    state.report = await api.compare(runIds, state.threshold);
+  } catch (error) {
+    if (!notPublished(error)) throw error;
+    return clear(container, emptyState(error.message, "camera"));
+  }
   renderThreshold(state.report);
   renderReport(container, state.report);
   refreshAllQuality();

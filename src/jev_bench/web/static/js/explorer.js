@@ -8,7 +8,8 @@
  * Exports: none (page entry point).
  */
 import { answerText, asLabels, setMatch, withScore } from "./answers.js";
-import { api } from "./api.js";
+import { api, notPublished } from "./api.js";
+import { STATIC } from "./deployment.js";
 import { clear, h, icon } from "./dom.js";
 import { emailDetail } from "./email-detail.js";
 import { fixed, shortModel, when } from "./format.js";
@@ -65,7 +66,7 @@ function renderPickers() {
   clear(
     document.getElementById("pickers"),
     checklist({ label: "Generations", items: generationItems, selected: state.selectedGenerations, onChange: onGenerations }),
-    checklist({ label: "Runs", items: runItems, selected: state.selectedRuns, onChange: onRuns }),
+    checklist({ label: "Runs", items: runItems, selected: state.selectedRuns, onChange: onRuns, disabled: STATIC }),
   );
 }
 
@@ -103,7 +104,8 @@ async function loadRows() {
     return;
   }
   clear(target, h("p", { class: "small text-body-secondary" }, "Loading…"));
-  const list = await api.emails(state.selectedGenerations, activeRuns(), state.threshold);
+  const list = await fetchRows(target);
+  if (!list) return;
   state.questions = list.questions.questions;
   state.question = state.questions[0]?.id ?? null;
   state.rows = list.rows;
@@ -114,8 +116,21 @@ async function loadRows() {
 }
 
 async function refreshRows() {
-  state.rows = (await api.emails(state.selectedGenerations, activeRuns(), state.threshold)).rows;
+  const list = await fetchRows(document.getElementById("email-table"));
+  if (!list) return;
+  state.rows = list.rows;
   renderTable();
+}
+
+async function fetchRows(target) {
+  try {
+    return await api.emails(state.selectedGenerations, activeRuns(), state.threshold);
+  } catch (error) {
+    if (!notPublished(error)) throw error;
+    clear(document.getElementById("filters"));
+    clear(target, emptyState(error.message, "camera"));
+    return null;
+  }
 }
 
 function renderThreshold() {

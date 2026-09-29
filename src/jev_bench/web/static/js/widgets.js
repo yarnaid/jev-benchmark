@@ -1,6 +1,7 @@
 /**
  * Reusable widgets built with h(): status badges, progress bars, empty states, a checkbox dropdown
- * ("checklist") taking items [{ value, text, hint }] and calling onChange(selectedValues), and a
+ * ("checklist") taking items [{ value, text, hint }] and calling onChange(selectedValues), optionally
+ * disabled (read-only, still showing the selection), and a
  * multi-label threshold slider (50-100 % of the top probability, step 5) calling onChange(fraction)
  * after a debounce. thresholdRange widens that range so any configured threshold in (0, 1] is an exact
  * slider position: the minimum drops below 50 % when needed (never to 0) and the step becomes 1 % when
@@ -36,7 +37,7 @@ export function emptyState(text, iconName = "inbox") {
   return h("div", { class: "text-center text-body-secondary py-5" }, h("div", { class: "fs-1" }, icon(iconName)), h("p", { class: "mb-0" }, text));
 }
 
-export function checklist({ label, items, selected, onChange }) {
+export function checklist({ label, items, selected, onChange, disabled = false }) {
   const chosen = new Set(selected);
   const summary = h("span", {});
   const updateSummary = () => {
@@ -50,7 +51,7 @@ export function checklist({ label, items, selected, onChange }) {
   };
   const options = items.map((item, index) => {
     const id = `${label.toLowerCase().replace(/\W+/g, "-")}-${index}`;
-    const input = h("input", { class: "form-check-input mt-1", type: "checkbox", id, checked: chosen.has(item.value), onchange: (event) => toggle(item.value, event.target.checked) });
+    const input = h("input", { class: "form-check-input mt-1", type: "checkbox", id, checked: chosen.has(item.value), disabled, onchange: (event) => toggle(item.value, event.target.checked) });
     const text = h("span", {}, item.text, item.hint ? h("small", { class: "d-block text-body-secondary" }, item.hint) : null);
     return h("li", {}, h("label", { class: "dropdown-item d-flex gap-2 align-items-start", for: id }, input, text));
   });

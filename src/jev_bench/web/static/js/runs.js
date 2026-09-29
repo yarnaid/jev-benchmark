@@ -77,7 +77,7 @@ function render() {
 
 function row(run) {
   const running = run.status === "running";
-  const box = h("input", { class: "form-check-input", type: "checkbox", checked: selected.has(run.id), disabled: running, "aria-label": `select ${run.id}`, onchange: (event) => toggle(run.id, event.target.checked) });
+  const box = h("input", { class: "form-check-input write-only", type: "checkbox", checked: selected.has(run.id), disabled: running, "aria-label": `select ${run.id}`, onchange: (event) => toggle(run.id, event.target.checked) });
   return h(
     "tr",
     {},

@@ -385,3 +385,11 @@ code,
   overflow: auto;
 }
 
+[data-static] .write-only {
+  display: none !important;
+}
+
+[data-static] #result {
+  width: 100%;
+}
+

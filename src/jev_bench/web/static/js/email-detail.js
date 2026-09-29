@@ -46,7 +46,7 @@ function labellingForm(detail, view, onSave) {
   const context = { ...view, detail, choices, runIds: Object.keys(detail.predictions) };
   const sections = detail.questions.questions.map((question) => questionSection(question, context));
   const save = h("button", { class: "btn btn-primary", type: "button", onclick: () => onSave(detail.email.id, choices, detail.human) }, icon("save"), " Save labels");
-  return h("div", {}, sections, h("div", { class: "d-flex justify-content-end mt-2" }, save));
+  return h("div", {}, sections, h("div", { class: "d-flex justify-content-end mt-2 write-only" }, save));
 }
 
 function answerOf(prediction, questionId) {
@@ -68,7 +68,7 @@ function questionSection(question, context) {
   const foldedBody = h("tbody", { class: "d-none" }, folded.map(optionRow));
   const table = h("table", { class: "table table-sm mb-2 detail-table" }, head, h("tbody", {}, shown.map(optionRow)), foldToggle(folded.length, foldedBody, runIds.length), foldedBody, question.type === "score" ? scoreRow(question.id, context.row, runIds) : null);
   const badge = cut === null ? null : h("span", { class: "badge text-bg-info" }, `≥ ${Math.round(cut * 100)}% of top `, helpIcon("threshold"));
-  const human = h("div", { class: "d-flex align-items-center gap-2" }, h("span", { class: "small text-nowrap" }, icon("person"), " ", withHelp("Human", "human")), humanControl(question, detail.human[question.id], context.choices));
+  const human = h("div", { class: "d-flex align-items-center gap-2 write-only" }, h("span", { class: "small text-nowrap" }, icon("person"), " ", withHelp("Human", "human")), humanControl(question, detail.human[question.id], context.choices));
   return h(
     "div",
     { class: "card mb-2 detail-card" },

@@ -7,6 +7,7 @@
  * Exports: none (page entry point).
  */
 import { api } from "./api.js";
+import { STATIC } from "./deployment.js";
 import { historyTable, resultCard } from "./analysis-result.js";
 import { estimateView, setupCard } from "./analysis-setup.js";
 import { clear, h, icon } from "./dom.js";
@@ -155,6 +156,7 @@ function requestBody() {
 }
 
 function scheduleEstimate(delay = ESTIMATE_DELAY_MS) {
+  if (STATIC) return;
   clearTimeout(state.estimate.timer);
   const token = {};
   state.estimate = { token, timer: setTimeout(() => refreshEstimate(token), delay) };
