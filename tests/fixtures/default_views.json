@@ -1,0 +1,25 @@
+{
+  "catalog": [
+    {"id": "jev", "slot": "jev"},
+    {"id": "anthropic", "slot": "anthropic"},
+    {"id": "embeddings", "slot": "embeddings"},
+    {"id": "kev", "slot": "embeddings"}
+  ],
+  "hidden_sets": [["kev"], ["embeddings"]],
+  "runs": [
+    {"id": "20260925-080000-jev-a", "column": "jev", "status": "completed", "generation_ids": ["g1"]},
+    {"id": "20260925-090000-jev-b", "column": "jev", "status": "completed", "generation_ids": ["g1"]},
+    {"id": "20260925-100000-jev-c", "column": "jev", "status": "running", "generation_ids": ["g1"]},
+    {"id": "20260925-090000-embeddings-a", "column": "embeddings", "status": "completed", "generation_ids": ["g1"]},
+    {"id": "20260925-095000-kev-a", "column": "kev", "status": "completed", "generation_ids": ["g1"]},
+    {"id": "20260925-110000-anthropic-a", "column": "anthropic", "status": "failed", "generation_ids": ["g1"]},
+    {"id": "20260925-120000-anthropic-b", "column": "anthropic", "status": "completed", "generation_ids": ["g1", "g2"]}
+  ],
+  "latest": [
+    {"id": "hide-kev", "generation_ids": ["g1"], "hidden": ["kev"], "expected": ["20260925-090000-embeddings-a", "20260925-090000-jev-b"]},
+    {"id": "hide-embeddings", "generation_ids": ["g1"], "hidden": ["embeddings"], "expected": ["20260925-090000-jev-b", "20260925-095000-kev-a"]},
+    {"id": "all-columns", "generation_ids": ["g1"], "hidden": [], "expected": ["20260925-090000-embeddings-a", "20260925-090000-jev-b", "20260925-095000-kev-a"]},
+    {"id": "exactly-two-generations", "generation_ids": ["g2", "g1"], "hidden": [], "expected": ["20260925-120000-anthropic-b"]},
+    {"id": "unknown-generation", "generation_ids": ["g9"], "hidden": [], "expected": []}
+  ]
+}
