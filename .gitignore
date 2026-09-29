@@ -11,3 +11,4 @@ data/embeddings/
 .DS_Store
 .hypothesis/
 .playwright-mcp/
+_site/
