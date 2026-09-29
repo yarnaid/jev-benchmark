@@ -28,6 +28,7 @@ uv sync                                   # install (Python >= 3.14)
 uv run jev-bench serve                    # UI + API on http://127.0.0.1:8000
 uv run jev-bench generate --count 200     # new generation (needs OPENROUTER_API_KEY in env/.env)
 uv run jev-bench run anthropic -g <generation-id> [--mode all_in_one] [--model anthropic/claude-sonnet-5]
+uv run jev-bench export-site _site        # static read-only snapshot of data/ (what GitHub Pages serves)
 
 uv run pytest                             # default suite (no network; integration + slow excluded)
 uv run pytest tests/test_compare_report.py -k fleiss -v    # one module / one test
@@ -133,8 +134,22 @@ node --test tests/js/                           # JS unit tests (Node's runner, 
     toggle (`js/slots.js`, pure); "Latest" on Benchmark and Analyze compares visible columns only.
   - Analysis reports render through `js/markdown.js` (pure parser) and `js/markdown-render.js` (`h()`
     nodes, never HTML). An `e001` ref links to `explorer.html?…&email=<id>`.
+- **Static snapshot** (`site/`, spec `docs/superpowers/specs/2026-09-29-pages-snapshot-design.md`):
+  `.github/workflows/pages.yml` runs `jev-bench export-site` on every push to `main` and deploys to
+  `https://yarnaid.github.io/jev-benchmark/`.
+  - `site/views.py` derives the published views from `data/` (Benchmark "Latest" per slot state, the
+    Explorer's all-columns default, each generation alone, each completed analysis). View ids are
+    content hashes, so a cached file never shows another selection.
+  - `site/export.py` calls the real GET routes in-process (`httpx2.ASGITransport`, no lifespan, so
+    `data/` is only read) over `site/offline.py` services: the network is refused, there is no key, and
+    `OfflineCatalog` lists no models. It writes each body unchanged; `site/static_copy.py` copies the
+    UI with `js/deployment.js` set to `STATIC = true` and the CSP as `<meta>` tags.
+  - In static mode `js/api.js` answers GETs from files through `api/site.json` and `js/static-api.js`;
+    `.write-only` controls are hidden. The Python and JS halves of three rules share
+    `tests/fixtures/*.json`: view selection, slider steps and request → file.
+  - The UI uses relative URLs only (`tests/test_web_static.py` enforces it), so it works under a sub-path.
 - **CLI**: `cli.py` (typer, lazy imports) delegates to `cli_jobs.py`, which uses the same launchers and
-  `Services` as the web app.
+  `Services` as the web app, and to `cli_export.py` for `export-site`.
 
 ## Invariants you must not break
 

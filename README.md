@@ -108,6 +108,17 @@ data/embeddings/         vector cache per embedding model (gitignored)
 
 When the web server starts, it marks runs and generations that were left `running` as `interrupted`.
 
+## Published snapshot
+
+A read-only snapshot of the committed results is at https://yarnaid.github.io/jev-benchmark/. GitHub
+Actions rebuilds it on every push to `main` with `jev-bench export-site`. It shows:
+- the Benchmark comparison, for the latest runs with either Embeddings or Kev;
+- the Explorer and the saved analyses;
+- every step of the label threshold.
+
+It cannot start runs, hold a key or save labels. Run the app locally for that, or to compare any other
+combination of runs.
+
 ## Development
 
 ```bash
