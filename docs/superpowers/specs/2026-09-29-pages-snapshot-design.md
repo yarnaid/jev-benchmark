@@ -6,6 +6,35 @@ browse the Benchmark comparison, the Explorer, the Runs and Generations lists, s
 for a fixed set of run selections at every label threshold. The site never starts a job, never holds an
 API key and never edits labels.
 
+## Revision (2026-09-29, while planning)
+
+Found while reading the code for the implementation plan; they supersede the sections below:
+
+- **Offline catalog.** `GET /catalog` fetches OpenRouter's model list (`services.catalog.for_column`), so a
+  network-refusing export would crash on it. The exporter replaces `services.catalog` with an
+  `OfflineCatalog` that lists no models; the route then offers each column's default model only (the
+  pickers are hidden on the site anyway). Every other exported route was probed offline on the real
+  `data/`: all answer 200 and `data/` stays unchanged.
+- **Content-addressed view ids.** GitHub Pages serves every file with `Cache-Control: max-age=600`. With
+  `v1`, `v2`, … a browser holding the previous deploy's `site.json` could read a new deploy's files under an
+  id that now means another selection, and show the wrong runs without any error. A view id is therefore
+  `v` + the first 12 hex digits of the SHA-256 of its sorted generation ids and sorted run ids, so an id
+  always means the same selection; the UI fetches `api/site.json` with `cache: "no-cache"`. Stale ES
+  modules for up to 10 minutes after a deploy remain a known limitation (a reload fixes them).
+- **One base-file rule.** Every request that does not depend on a view maps to `api<path>.json`, so
+  `/analysis/defaults` becomes `api/analysis/defaults.json` (not `analysis-defaults.json`).
+- **Run order.** A view lists its run ids in catalog column order, the order the Benchmark requests them
+  (`orderByColumn`); the compare report lists raters in request order.
+- **Analyses referencing missing data.** An analysis whose generations or runs are not all in `data/` gives
+  no view (a warning is logged) instead of failing the export.
+- **More root-absolute URLs** than listed in §2: `generations.js` (Explore link) and `report-summary.js`
+  (Explorer link of the summary table). Both become relative.
+- **Module split.** `site/` also gets `errors.py` (`ExportError`), `offline.py` (offline settings,
+  refusing client, `OfflineCatalog`) and `writer.py` (fetch one planned request, write its file, refuse
+  paths outside `OUT`). `export_site` takes the UI source directory as a parameter (default `STATIC_DIR`),
+  so its test copies a two-file fake UI. The CLI body lives in `cli_export.py`: an export is not a job,
+  and `cli_jobs.py` is about jobs.
+
 ## 1. Decisions
 
 | Topic | Decision |
@@ -52,8 +81,8 @@ views with equal generation and run sets (sets, not lists):
 
 Today this gives 4 views (Latest · Embeddings = the analysis, Latest · Kev, All columns, the generation
 alone), about 90 threshold files and 400 email details. A view whose generation is not committed is
-skipped. View ids are `v1`, `v2`, … in derivation order; the
-label names the rule (for example "Latest · Embeddings", "All columns", "Analysis 2026-09-28").
+skipped. View ids are content hashes (see the revision above), listed in derivation order; the
+label names the rule (for example "Latest without kev", "All columns", "Analysis <id>").
 
 ### 3.2 Thresholds
 
@@ -66,7 +95,7 @@ view whose response has no `multi` question gets `t-default` only.
 
 | Request | File |
 |---|---|
-| `GET /status`, `/catalog`, `/questions`, `/generations`, `/runs`, `/analyses`, `/analysis/defaults` | `api/<name>.json` (`analysis/defaults` → `api/analysis-defaults.json`) |
+| `GET /status`, `/catalog`, `/questions`, `/generations`, `/runs`, `/analyses`, `/analysis/defaults` | `api/<name>.json` (`analysis/defaults` → `api/analysis/defaults.json`) |
 | `GET /generations/{id}`, `/runs/{id}`, `/analyses/{id}` | `api/generations/<id>.json`, `api/runs/<id>.json`, `api/analyses/<id>.json` |
 | `GET /analyses/{id}/prompts` | `api/analyses/<id>/prompts.json` |
 | `GET /compare?runs=R` / `&threshold=t` | `api/compare/<view>/t-default.json` / `t<round(100·t)>.json`, only for views with at least one run (the Benchmark never compares zero runs) |
