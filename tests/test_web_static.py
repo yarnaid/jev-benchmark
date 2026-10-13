@@ -1,6 +1,6 @@
 """Contract tests for the static UI: no HTML-injection sinks, no inline scripts, pinned CDN
-assets with SRI, and every local reference (script, stylesheet, ES-module import) resolves to an
-existing file."""
+assets with SRI, every local reference (script, stylesheet, ES-module import) resolves to an
+existing file, and every configured column has the same chart color in palette.js and app.css."""
 
 import re
 from html.parser import HTMLParser
@@ -8,11 +8,20 @@ from pathlib import Path
 
 import pytest
 
+from jev_bench.benchmark_config import load_benchmark_config
 from jev_bench.web.app import STATIC_DIR
 
 FORBIDDEN_SINKS = re.compile(r"\binnerHTML\b|\bouterHTML\b|insertAdjacentHTML|document\.write")
 ROOT_ABSOLUTE = re.compile(r"""["'`]/(?:api\b|[\w-]+\.html)|href:\s*["'`]/["'`]|go\(\s*["'`]/""")
 IMPORT = re.compile(r"""from\s+["'](\./[^"']+)["']""")
+SERIES_ENTRY = re.compile(r'(\w+): \["(#[0-9a-f]{6})", "(#[0-9a-f]{6})"\]')
+CSS_BLOCKS = re.compile(r'^(:root|\[data-bs-theme="dark"\]) \{(.*?)^\}', re.MULTILINE | re.DOTALL)
+COLUMN_IDS = [
+    column.id
+    for column in load_benchmark_config(
+        Path(__file__).resolve().parents[1] / "config" / "benchmark.toml"
+    ).columns
+]
 SHELL_MODULES = (
     "dom.js",
     "format.js",
@@ -136,3 +145,22 @@ def test_pages_follow_the_csp_contract(page: Path) -> None:
         if url and "://" not in url and not url.startswith("data:"):
             assert not url.startswith("/"), f"root-absolute URL {url}"
             assert (STATIC_DIR / url).exists(), f"missing local asset {url}"
+
+
+def _read(relative: str) -> str:
+    return (STATIC_DIR / relative).read_text(encoding="utf-8")
+
+
+def _css_color(block: str, column_id: str) -> str | None:
+    match = re.search(rf"--jb-col-{column_id}: (#[0-9a-f]{{6}});", block)
+    return match.group(1) if match else None
+
+
+@pytest.mark.parametrize("column_id", COLUMN_IDS)
+def test_every_column_has_one_chart_color_in_palette_and_css(column_id: str) -> None:
+    series = {key: steps for key, *steps in SERIES_ENTRY.findall(_read("js/palette.js"))}
+    css = _read("css/app.css")
+    blocks = dict(CSS_BLOCKS.findall(css))
+    themes = (":root", '[data-bs-theme="dark"]')
+    assert series.get(column_id) == [_css_color(blocks[theme], column_id) for theme in themes]
+    assert f".accent-{column_id} {{ --jb-accent: var(--jb-col-{column_id}); }}" in css
