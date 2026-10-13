@@ -92,3 +92,12 @@ modality = "decisions"
 prefix = "jaredpalmer/"
 default_model = "jaredpalmer/kev-4b"
 slot = "embeddings"
+
+[[columns]]
+id = "microsoft"
+title = "Microsoft"
+kind = "decisions"
+modality = "decisions"
+prefix = "microsoft/"
+default_model = "microsoft/microsoft-decision-1"
+slot = "embeddings"

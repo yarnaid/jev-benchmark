@@ -1,9 +1,9 @@
 /**
  * Pure card-slot helpers. Columns sharing a `slot` in config/benchmark.toml share one Benchmark card
- * position and are swapped with a toggle in the card header (Kev swaps with Embeddings). A slot sits where
- * its first column appears in catalog order; its visible column is the stored pick when that is still a
- * member of the slot, else the slot's first column. Picks are read through a caller-supplied reader so this
- * module stays free of storage and DOM.
+ * position and are swapped with a toggle in the card header (Kev and Microsoft swap with Embeddings). A slot
+ * sits where its first column appears in catalog order; its visible column is the stored pick when that is
+ * still a member of the slot, else the slot's first column. Picks are read through a caller-supplied reader so
+ * this module stays free of storage and DOM.
  * Exports: slotGroups, slotView, visibleColumns, hiddenColumnIds, slotPrefKey, slotPicks.
  */
 

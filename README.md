@@ -41,6 +41,7 @@ before you start. To get a key: [create one](https://openrouter.ai/keys) and
 | OpenAI | chat, one email per request or all in one | `openai/gpt-5.6-terra` |
 | Embeddings | similarity of the email to each option's text, fixed temperature | `openai/text-embedding-3-large` |
 | Kev (optional, swaps with Embeddings in one card) | Decisions API, like Jev | `jaredpalmer/kev-4b` |
+| Microsoft (optional, swaps with Embeddings in one card) | Decisions API, like Jev | `microsoft/microsoft-decision-1` |
 
 **Questions** (`config/questions.toml`, 18 in the shipped set): a multi-label `category`; four ordered
 scales (`urgency`, `importance`, `sentiment`, `confidentiality`) that also get a 0–100 score; and thirteen
@@ -65,7 +66,8 @@ uv run jev-bench generate [--count 200] [--name generation] [--seed N] [--model 
 uv run jev-bench run COLUMN -g GENERATION_ID [-g ...] [--model ID] [--mode per_email|all_in_one]
 ```
 
-`COLUMN` is a column id from `config/benchmark.toml` (`jev`, `anthropic`, `openai`, `embeddings`, `kev`). The CLI
+`COLUMN` is a column id from `config/benchmark.toml` (`jev`, `anthropic`, `openai`, `embeddings`, `kev`,
+`microsoft`). The CLI
 and the web UI share the same jobs and data. A run started from the CLI appears in the UI after a page
 reload.
 
@@ -112,7 +114,8 @@ When the web server starts, it marks runs and generations that were left `runnin
 
 A read-only snapshot of the committed results is at https://yarnaid.github.io/jev-benchmark/. GitHub
 Actions rebuilds it on every push to `main` with `jev-bench export-site`. It shows:
-- the Benchmark comparison, for the latest runs with either Embeddings or Kev;
+- the Benchmark comparison of the latest committed runs, for each pick of the shared
+  Embeddings / Kev / Microsoft card;
 - the Explorer and the saved analyses;
 - every step of the label threshold.
 

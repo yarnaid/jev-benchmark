@@ -9,10 +9,11 @@ const CATALOG = [
   { id: "embeddings", title: "Embeddings", slot: "embeddings" },
   { id: "anthropic", title: "Anthropic", slot: "anthropic" },
   { id: "kev", title: "Kev", slot: "embeddings" },
+  { id: "microsoft", title: "Microsoft", slot: "embeddings" },
 ];
 
 test("slotGroups groups by slot, positioned at the slot's first column", () => {
-  assert.deepEqual(slotGroups(CATALOG).map(({ slot, columns }) => [slot, columns.map((column) => column.id)]), [["jev", ["jev"]], ["embeddings", ["embeddings", "kev"]], ["anthropic", ["anthropic"]]]);
+  assert.deepEqual(slotGroups(CATALOG).map(({ slot, columns }) => [slot, columns.map((column) => column.id)]), [["jev", ["jev"]], ["embeddings", ["embeddings", "kev", "microsoft"]], ["anthropic", ["anthropic"]]]);
 });
 
 test("a column without a slot is its own slot", () => {
@@ -20,10 +21,11 @@ test("a column without a slot is its own slot", () => {
 });
 
 const PICK_CASES = [
-  ["no stored pick shows the slot's first column", {}, ["jev", "embeddings", "anthropic"], ["kev"]],
-  ["a stored pick swaps the column in", { embeddings: "kev" }, ["jev", "kev", "anthropic"], ["embeddings"]],
-  ["a stale pick (column removed from config) falls back", { embeddings: "gone" }, ["jev", "embeddings", "anthropic"], ["kev"]],
-  ["a pick naming another slot's column is ignored", { embeddings: "jev" }, ["jev", "embeddings", "anthropic"], ["kev"]],
+  ["no stored pick shows the slot's first column", {}, ["jev", "embeddings", "anthropic"], ["kev", "microsoft"]],
+  ["a stored pick swaps the column in", { embeddings: "kev" }, ["jev", "kev", "anthropic"], ["embeddings", "microsoft"]],
+  ["a stored pick swaps the slot's third column in", { embeddings: "microsoft" }, ["jev", "microsoft", "anthropic"], ["embeddings", "kev"]],
+  ["a stale pick (column removed from config) falls back", { embeddings: "gone" }, ["jev", "embeddings", "anthropic"], ["kev", "microsoft"]],
+  ["a pick naming another slot's column is ignored", { embeddings: "jev" }, ["jev", "embeddings", "anthropic"], ["kev", "microsoft"]],
 ];
 
 for (const [name, picks, visible, hidden] of PICK_CASES) {

@@ -2,8 +2,10 @@
  * One Benchmark column card: the quality of the column's current run (filled by benchmark.js from the
  * comparison, see quality.js), model and request-mode pickers, the estimated cost of a run, Run/Cancel,
  * and the live or final statistics of that run. Every statistic carries a (?) tooltip. When the card's
- * slot holds several columns (Kev and Embeddings), the header shows a segmented control to swap them.
- * The card's accent color is its column's chart color (`accent-<column id>` in app.css).
+ * slot holds several columns (Embeddings, Kev and Microsoft), the header shows a segmented control to swap
+ * them in place of the title and the kind badge (each toggle's tooltip names the kind), so the header keeps one
+ * line beside the other cards; it still wraps if a card is too narrow. The card's accent color is its column's
+ * chart color (`accent-<column id>` in app.css).
  * Exports: columnCard, statsBlock, estimateBlock.
  */
 import { h, icon } from "./dom.js";
@@ -16,7 +18,7 @@ export function columnCard(column, { model, mode, onModel, onMode, onRun, onCanc
   const run = h("button", { class: "btn btn-primary btn-sm", type: "button", onclick: () => onRun(select.value) }, icon("play-fill"), " Run");
   const cancel = h("button", { class: "btn btn-outline-danger btn-sm", type: "button", id: `cancel-${column.id}`, disabled: !running, onclick: onCancel }, icon("stop-fill"), " Cancel");
   const warning = column.error ? h("div", { class: "alert alert-warning py-1 px-2 small mb-0" }, icon("exclamation-triangle"), ` Catalog unavailable: ${column.error}`) : null;
-  const header = h("div", { class: "card-header d-flex align-items-center gap-2" }, h("span", { class: "series-dot", "aria-hidden": "true" }), cardTitle(column, siblings, onSwap), h("span", { class: "badge text-bg-light border" }, column.kind));
+  const header = h("div", { class: "card-header d-flex flex-wrap align-items-center gap-2" }, h("span", { class: "series-dot", "aria-hidden": "true" }), cardTitle(column, siblings, onSwap), siblings.length < 2 ? h("span", { class: "badge text-bg-light border ms-auto" }, column.kind) : null);
   const body = h("div", { class: "card-body d-flex flex-column gap-2" }, warning, h("div", { class: "quality-slot d-flex flex-column gap-2", id: `quality-${column.id}` }), h("div", { class: "write-only" }, h("label", { class: "form-label small mb-1" }, "Model"), select, extras(column, mode, onMode)), h("div", { class: "estimate small write-only", id: `estimate-${column.id}` }), h("div", { class: "d-flex gap-2 write-only" }, run, cancel), h("div", { id: `stats-${column.id}` }));
   return h("div", { class: `card h-100 column-card shadow-sm accent-${column.id}` }, header, body);
 }
@@ -25,7 +27,7 @@ function cardTitle(column, siblings, onSwap) {
   if (siblings.length < 2) return h("span", { class: "fw-semibold me-auto" }, column.title);
   const option = (sibling) => {
     const id = `slot-${column.slot}-${sibling.id}`;
-    return [h("input", { type: "radio", class: "btn-check", name: `slot-${column.slot}`, id, checked: sibling.id === column.id, onchange: () => onSwap(sibling.id) }), h("label", { class: "btn btn-outline-secondary btn-sm fw-semibold", for: id }, sibling.title)];
+    return [h("input", { type: "radio", class: "btn-check", name: `slot-${column.slot}`, id, checked: sibling.id === column.id, onchange: () => onSwap(sibling.id) }), h("label", { class: "btn btn-outline-secondary btn-sm fw-semibold", for: id, title: `${sibling.title} (${sibling.kind})` }, sibling.title)];
   };
   return h("div", { class: "btn-group me-auto", role: "group", "aria-label": "Column shown in this slot" }, siblings.map(option));
 }

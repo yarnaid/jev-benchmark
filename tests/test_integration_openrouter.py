@@ -81,6 +81,7 @@ def _seed(services: Services) -> None:
         pytest.param("openai", "per_email", id="openai-per-email"),
         pytest.param("embeddings", None, id="embeddings"),
         pytest.param("kev", None, id="kev"),
+        pytest.param("microsoft", None, id="microsoft"),
     ],
 )
 async def test_one_email_per_column(

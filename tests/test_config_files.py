@@ -61,13 +61,15 @@ def test_shipped_benchmark_config() -> None:
         ("openai", "chat", "openai/gpt-5.6-terra"),
         ("embeddings", "embeddings", "openai/text-embedding-3-large"),
         ("kev", "decisions", "jaredpalmer/kev-4b"),
+        ("microsoft", "decisions", "microsoft/microsoft-decision-1"),
     ]
     assert config.column("anthropic").cache_system_prompt is True
     assert config.column("openai").cache_system_prompt is False
     assert config.embeddings.email_template.startswith("Sent: $sent_at")
-    jev, kev = config.column("jev"), config.column("kev")
+    jev, kev, microsoft = config.column("jev"), config.column("kev"), config.column("microsoft")
     assert (jev.prefix, jev.effective_slot) == ("typesafe/", "jev")
     assert (kev.prefix, kev.effective_slot) == ("jaredpalmer/", "embeddings")
+    assert (microsoft.prefix, microsoft.effective_slot) == ("microsoft/", "embeddings")
 
 
 def test_shipped_generation_config() -> None:

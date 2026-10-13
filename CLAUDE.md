@@ -6,8 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 A benchmark for **Jev** (`typesafe/jev-1.13`, TypeSafe's decision model on OpenRouter) against an Anthropic
 chat model, an OpenAI chat model, an embedding-similarity baseline and optionally **Kev**
-(`jaredpalmer/kev-4b`, an open Jev-like decision model) on synthetic email triage. Everything goes through
-OpenRouter.
+(`jaredpalmer/kev-4b`, an open Jev-like decision model) and **Microsoft-Decision-1**
+(`microsoft/microsoft-decision-1`) on synthetic email triage. Everything goes through OpenRouter.
 
 Design: `docs/superpowers/specs/2026-09-24-jev-benchmark-design.md` (§14 records revisions made while
 planning). Implementation plan: `docs/superpowers/plans/2026-09-24-jev-benchmark.md`.
@@ -69,10 +69,10 @@ node --test tests/js/                           # JS unit tests (Node's runner, 
     model's catalog `supported_parameters` (`temperature` on Claude Sonnet 5 and GPT-5.6 Terra) are not
     sent, because `provider.require_parameters` would otherwise 404; the run snapshot records them as
     `null`.
-  - Kev is a second `decisions` column (`prefix = "jaredpalmer/"`, 8,192-token context) that shares a card
-    slot with Embeddings; the Jev column's `prefix = "typesafe/"` keeps Kev out of Jev's model picker. The
-    "×Jev" baseline in the summary table is the `jev` column's run (`jevBaseline`), never just the first
-    decisions run.
+  - Kev (`prefix = "jaredpalmer/"`, 8,192-token context) and Microsoft (`prefix = "microsoft/"`,
+    32,768-token context) are further `decisions` columns that share a card slot with Embeddings; the Jev
+    column's `prefix = "typesafe/"` keeps them out of Jev's model picker. The "×Jev" baseline in the summary
+    table is the `jev` column's run (`jevBaseline`), never just the first decisions run.
   - `runner.py` plans requests under the token budget (`tokens.py` + `request_plan.py`: minimal equal
     contiguous split), runs them under a semaphore, and appends predictions and responses.
 - **Generation** (`generation/`): a seeded trait plan (`plan.py`), then prompts and strict schema
@@ -129,9 +129,11 @@ node --test tests/js/                           # JS unit tests (Node's runner, 
   - Every metric has a (?) tooltip. The texts live once in `js/glossary.js`, which the Help page
     (`help.html`) also renders; a node test checks that every `withHelp`/`helpIcon` key exists.
   - Rater colors come from `js/palette.js` (validated categorical order, light and dark steps; Kev has the
-    former green spare).
-  - Columns sharing a `slot` (`ColumnConfig.slot`: Kev and Embeddings) share one Benchmark card with a header
-    toggle (`js/slots.js`, pure); "Latest" on Benchmark and Analyze compares visible columns only.
+    former green spare, Microsoft a deeper red than the documented one, so it stays clear of Anthropic's
+    orange). All eight hues are taken, so a second run of the same column is gray.
+  - Columns sharing a `slot` (`ColumnConfig.slot`: Embeddings, Kev and Microsoft) share one Benchmark card
+    with a header toggle (`js/slots.js`, pure); "Latest" on Benchmark and Analyze compares visible columns
+    only.
   - Analysis reports render through `js/markdown.js` (pure parser) and `js/markdown-render.js` (`h()`
     nodes, never HTML). An `e001` ref links to `explorer.html?…&email=<id>`.
 - **Static snapshot** (`site/`, spec `docs/superpowers/specs/2026-09-29-pages-snapshot-design.md`):

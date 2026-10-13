@@ -64,8 +64,9 @@ OLD_JEV = Run("20260925-080000-jev-b", "jev", "completed", ("g1",))
 CLAUDE = Run("20260925-090100-anthropic-a", "anthropic", "completed", ("g1",))
 EMBEDDINGS = Run("20260925-090200-embeddings-a", "embeddings", "completed", ("g1",))
 KEV = Run("20260925-090300-kev-a", "kev", "completed", ("g1",))
+MICROSOFT = Run("20260925-090400-microsoft-a", "microsoft", "completed", ("g1",))
 ORPHAN = Run("20260925-070000-jev-c", "jev", "completed", ("g9",))
-FULL = [KEV, EMBEDDINGS, CLAUDE, JEV, OLD_JEV, ORPHAN]
+FULL = [KEV, MICROSOFT, EMBEDDINGS, CLAUDE, JEV, OLD_JEV, ORPHAN]
 ANALYSIS_ID = "20260928-070000-analysis-a"
 
 
@@ -78,9 +79,10 @@ def _analysis(
 type Expected = list[tuple[str, tuple[str, ...], tuple[str, ...]]]
 
 SLOT_VIEWS: Expected = [
-    ("Latest without kev", ("g1",), (JEV.id, CLAUDE.id, EMBEDDINGS.id)),
-    ("Latest without embeddings", ("g1",), (JEV.id, CLAUDE.id, KEV.id)),
-    ("All columns", ("g1",), (JEV.id, CLAUDE.id, EMBEDDINGS.id, KEV.id)),
+    ("Latest without kev, microsoft", ("g1",), (JEV.id, CLAUDE.id, EMBEDDINGS.id)),
+    ("Latest without embeddings, microsoft", ("g1",), (JEV.id, CLAUDE.id, KEV.id)),
+    ("Latest without embeddings, kev", ("g1",), (JEV.id, CLAUDE.id, MICROSOFT.id)),
+    ("All columns", ("g1",), (JEV.id, CLAUDE.id, EMBEDDINGS.id, KEV.id, MICROSOFT.id)),
     ("Generation only", ("g1",), ()),
 ]
 
@@ -93,7 +95,10 @@ SLOT_VIEWS: Expected = [
             ["g1"],
             [JEV],
             [],
-            [("Latest without kev", ("g1",), (JEV.id,)), ("Generation only", ("g1",), ())],
+            [
+                ("Latest without kev, microsoft", ("g1",), (JEV.id,)),
+                ("Generation only", ("g1",), ()),
+            ],
             id="equal-selections-merge",
         ),
         pytest.param(
