@@ -3,9 +3,9 @@
  * comparison, see quality.js), model and request-mode pickers, the estimated cost of a run, Run/Cancel,
  * and the live or final statistics of that run. Every statistic carries a (?) tooltip. When the card's
  * slot holds several columns (Embeddings, Kev and Microsoft), the header shows a segmented control to swap
- * them in place of the title and the kind badge (each toggle's tooltip names the kind), so the header keeps one
- * line beside the other cards; it still wraps if a card is too narrow. The card's accent color is its column's
- * chart color (`accent-<column id>` in app.css).
+ * them in place of the title and the kind badge (each toggle names the kind in its tooltip and to screen
+ * readers), so the header keeps one line beside the other cards; it still wraps if a card is too narrow.
+ * The card's accent color is its column's chart color (`accent-<column id>` in app.css).
  * Exports: columnCard, statsBlock, estimateBlock.
  */
 import { h, icon } from "./dom.js";
@@ -27,7 +27,7 @@ function cardTitle(column, siblings, onSwap) {
   if (siblings.length < 2) return h("span", { class: "fw-semibold me-auto" }, column.title);
   const option = (sibling) => {
     const id = `slot-${column.slot}-${sibling.id}`;
-    return [h("input", { type: "radio", class: "btn-check", name: `slot-${column.slot}`, id, checked: sibling.id === column.id, onchange: () => onSwap(sibling.id) }), h("label", { class: "btn btn-outline-secondary btn-sm fw-semibold", for: id, title: `${sibling.title} (${sibling.kind})` }, sibling.title)];
+    return [h("input", { type: "radio", class: "btn-check", name: `slot-${column.slot}`, id, checked: sibling.id === column.id, onchange: () => onSwap(sibling.id) }), h("label", { class: "btn btn-outline-secondary btn-sm fw-semibold", for: id, title: `${sibling.title} (${sibling.kind})` }, sibling.title, h("span", { class: "visually-hidden" }, ` (${sibling.kind})`))];
   };
   return h("div", { class: "btn-group me-auto", role: "group", "aria-label": "Column shown in this slot" }, siblings.map(option));
 }
