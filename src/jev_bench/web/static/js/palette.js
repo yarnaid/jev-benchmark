@@ -5,13 +5,14 @@
  * separation of adjacent slots). Kev takes the former green spare (validated in both modes, both with Kev
  * beside Embeddings and swapped in for it; its dark step sits at CVD ΔE 6.9 next to the reference, legal
  * because every chart has a legend and tooltips). Microsoft takes the last hue, red, at deeper steps than the
- * documented ones: those sat at normal-vision ΔE 7.1 light / 6.2 dark from Anthropic's orange (and the dark
- * one at 13.0 from the reference's amber). The light step keeps the documented hue at OKLCH L 0.43 (ΔE >= 24.5
- * from every other color, CVD >= 9.1); the dark step is a crimson at L 0.49 (ΔE 17.0 from Anthropic, CVD 7.6
- * next to Kev, contrast 2.67:1 on the dark surface, relieved by the legends, tooltips and tables). Every
- * default view (Latest per slot pick, all columns) passes in both modes. All eight hues are taken, so a second
- * run of the same column and unknown columns take a neutral gray. A color follows the entity, never its
- * position.
+ * documented ones: those sat at normal-vision ΔE 7.1 (both modes) from Anthropic's orange, and the dark one at
+ * 13.0 from the reference's amber. The light step keeps the documented hue at OKLCH L 0.43 (ΔE >= 24.5 from
+ * every other color, CVD >= 9.1); the dark step is a crimson at L 0.49 (ΔE 17.0 from Anthropic, CVD 7.6 next
+ * to Kev, contrast 2.67:1 on the dark surface, relieved by the legends, tooltips and tables). Every default
+ * view (Latest per slot pick, all columns) passes in both modes. A hand-picked dark comparison with Embeddings
+ * and Microsoft but no Kev puts them side by side at ΔE 13.3, under the floor of 15; the legends name them.
+ * All eight hues are taken, so a second run of the same column and unknown columns take a neutral gray. A color
+ * follows the entity, never its position.
  * Exports: raterColors.
  */
 
