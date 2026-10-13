@@ -14,6 +14,7 @@ from jev_bench.web.app import STATIC_DIR
 FORBIDDEN_SINKS = re.compile(r"\binnerHTML\b|\bouterHTML\b|insertAdjacentHTML|document\.write")
 ROOT_ABSOLUTE = re.compile(r"""["'`]/(?:api\b|[\w-]+\.html)|href:\s*["'`]/["'`]|go\(\s*["'`]/""")
 IMPORT = re.compile(r"""from\s+["'](\./[^"']+)["']""")
+SERIES_BLOCK = re.compile(r"^const SERIES = \{(.*?)^\};", re.MULTILINE | re.DOTALL)
 SERIES_ENTRY = re.compile(r'(\w+): \["(#[0-9a-f]{6})", "(#[0-9a-f]{6})"\]')
 CSS_BLOCKS = re.compile(r'^(:root|\[data-bs-theme="dark"\]) \{(.*?)^\}', re.MULTILINE | re.DOTALL)
 COLUMN_IDS = [
@@ -158,7 +159,9 @@ def _css_color(block: str, column_id: str) -> str | None:
 
 @pytest.mark.parametrize("column_id", COLUMN_IDS)
 def test_every_column_has_one_chart_color_in_palette_and_css(column_id: str) -> None:
-    series = {key: steps for key, *steps in SERIES_ENTRY.findall(_read("js/palette.js"))}
+    block = SERIES_BLOCK.search(_read("js/palette.js"))
+    assert block is not None
+    series = {key: steps for key, *steps in SERIES_ENTRY.findall(block.group(1))}
     css = _read("css/app.css")
     blocks = dict(CSS_BLOCKS.findall(css))
     themes = (":root", '[data-bs-theme="dark"]')
